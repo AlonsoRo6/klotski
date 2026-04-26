@@ -43,9 +43,9 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
     g = gt.Graph(directed=False)
 
     # Propietats dels nodes
-    vp_state    = g.new_vertex_property("string")
+    vp_state = g.new_vertex_property("string")
     vp_is_start = g.new_vertex_property("bool")
-    vp_is_goal  = g.new_vertex_property("bool")
+    vp_is_goal = g.new_vertex_property("bool")
 
     # Propietat del graf: guardem el puzzle en JSON
     gp_puzzle = g.new_graph_property("string")
@@ -57,9 +57,9 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
     def get_or_create(state: State) -> gt.Vertex:
         if state not in state_to_vertex:
             v = g.add_vertex()
-            vp_state[v]    = _state_to_str(state)
+            vp_state[v] = _state_to_str(state)
             vp_is_start[v] = (state == puzzle.start)
-            vp_is_goal[v]  = is_goal(puzzle, state)
+            vp_is_goal[v] = is_goal(puzzle, state)
             state_to_vertex[state] = v
         return state_to_vertex[state]
 
@@ -70,7 +70,7 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
 
     while stack:
         state = stack.pop()
-        v_cur = get_or_create(state)
+        v_cur = state_to_vertex[state] #el vertex ja ha estat creat
 
         for move in possible_moves(puzzle, state):
             new_state = apply_move(puzzle, state, move)
@@ -83,9 +83,9 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
                 visited.add(new_state)
                 stack.append(new_state)
 
-    g.vertex_properties["state"]    = vp_state
+    g.vertex_properties["state"] = vp_state
     g.vertex_properties["is_start"] = vp_is_start
-    g.vertex_properties["is_goal"]  = vp_is_goal
+    g.vertex_properties["is_goal"] = vp_is_goal
 
     return g
 

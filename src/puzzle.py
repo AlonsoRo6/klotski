@@ -43,8 +43,8 @@ class Piece:
             raise ValueError("Coordenades repetides")
         if self.coords != tuple(sorted(self.coords)):
             raise ValueError("Les coordenades no estan ordenades")
-        xs = [x for x, y in self.coords]
-        ys = [y for x, y in self.coords]
+        xs = [x for x, _ in self.coords]
+        ys = [y for _, y in self.coords]
         if min(xs) != 0 or min(ys) != 0:
             raise ValueError("La peça no està normalitzada (min x o min y != 0)")
 

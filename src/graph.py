@@ -15,7 +15,7 @@ from puzzle import Puzzle, State
 from logic import possible_moves, apply_move, is_goal
 from typing import cast
 
-# StateKey és una tupla de posicions que identifica unívocament un estat
+# StateKey és una tupla de posicions que identifica un estat
 StateKey = tuple[tuple[int, int], ...]
 
 
@@ -30,7 +30,7 @@ def state_key(puzzle: Puzzle, state_str: str | State) -> StateKey:
     return cast(StateKey, tuple(tuple(int(v) for v in p.split(",")) for p in parts))
 
 
-def _state_to_str(state: State) -> str:
+def state_to_str(state: State) -> str:
     """Converteix un State a string per guardar-lo al graf."""
     return ";".join(f"{x},{y}" for x, y in state.positions)
 
@@ -57,7 +57,7 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
     def get_or_create(state: State) -> gt.Vertex:
         if state not in state_to_vertex:
             v = g.add_vertex()
-            vp_state[v] = _state_to_str(state)
+            vp_state[v] = state_to_str(state)
             vp_is_start[v] = (state == puzzle.start)
             vp_is_goal[v] = is_goal(puzzle, state)
             state_to_vertex[state] = v
@@ -65,7 +65,6 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
 
     # DFS iteratiu
     stack = [puzzle.start]
-    visited: set[State] = {puzzle.start}
     get_or_create(puzzle.start)
 
     while stack:
@@ -74,14 +73,15 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
 
         for move in possible_moves(puzzle, state):
             new_state = apply_move(puzzle, state, move)
-            v_new = get_or_create(new_state)
 
+            if new_state not in state_to_vertex:
+                stack.append(new_state)
+                
+            v_new = get_or_create(new_state)
+            
             if not g.edge(v_cur, v_new):
                 g.add_edge(v_cur, v_new)
 
-            if new_state not in visited:
-                visited.add(new_state)
-                stack.append(new_state)
 
     g.vertex_properties["state"] = vp_state
     g.vertex_properties["is_start"] = vp_is_start
@@ -99,15 +99,14 @@ if __name__ == "__main__":
     output_path = Path(sys.argv[2])
 
     puzzle = Puzzle.from_json(json_path.read_text())
-    print(f"Construint graf per al puzzle ({puzzle.W}x{puzzle.H})...")
 
     g = build_graph(puzzle)
 
     n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])
-    print(f"Nodes (estats):      {g.num_vertices()}")
+    print(f"Nodes (estats): {g.num_vertices()}")
     print(f"Arestes (moviments): {g.num_edges()}")
-    print(f"Estats finals:       {n_goals}")
-    print(f"Resoluble:           {'Sí' if n_goals > 0 else 'No'}")
+    print(f"Estats finals: {n_goals}")
+    print(f"Resoluble: {'Sí' if n_goals > 0 else 'No'}")
 
     g.save(str(output_path))
     print(f"Graf guardat a {output_path}")

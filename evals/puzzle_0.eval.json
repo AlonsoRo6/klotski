@@ -1,0 +1,11 @@
+{
+  "puzzle": "puzzle_0.json",
+  "metrics": {
+    "min_moves": 45,
+    "num_states": 7328,
+    "diameter": 174,
+    "num_optimal_goals": 1,
+    "avg_clustering": 0.0
+  },
+  "stars": 2.87
+}

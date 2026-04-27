@@ -9,13 +9,11 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from collections import deque
 
 import graph_tool.all as gt #type:ignore
 
-from puzzle import Puzzle, State
-from graph import state_key, StateKey
-
+from puzzle import Puzzle
+from graph import state_key
 
 def find_shortest_path(g: gt.Graph) -> list[int] | None:
     vp_is_start = g.vp["is_start"]
@@ -31,47 +29,24 @@ def find_shortest_path(g: gt.Graph) -> list[int] | None:
     if start_v is None:
         raise ValueError("No s'ha trobat el node inicial al graf")
 
-    # Usem shortest_path de graph-tool cap a cada node goal
-    # i ens quedem amb el camí més curt
 
-    visited: dict[int, int|None] = {int(start_v): None}
-    queue = deque([start_v])
+    goals = [v for v in g.vertices() if vp_is_goal[v]]
 
-    while queue:
-        v = queue.popleft()
+    if not goals:
+        return None
+    
+    dist_map = gt.shortest_distance(g, start_v) 
 
-        if vp_is_goal[v]: #reconstruir el camí
-            path = []
-            current = int(v)
-            while current is not None:
-                path.append(current)
-                current = visited[current]
-            return list(reversed(path))
+    best_goal = min(goals, key=lambda v: dist_map[v]) # type: ignore
+    best_path = gt.shortest_path(g, start_v, best_goal)[0]
 
-        for neighbor in v.out_neighbors():
-            n_idx = int(neighbor)
-            if n_idx not in visited:
-                visited[n_idx] = int(v)  # guardem el pare
-                queue.append(neighbor)
-
-
-    '''best_path = None
-
-    for v in g.vertices():
-        if not vp_is_goal[v]:
-            continue
-        vlist, _ = gt.shortest_path(g, g.vertex(start_idx), v)  # type: ignore
-        if len(vlist) == 0:
-            continue
-        if best_path is None or len(vlist) < len(best_path):
-            best_path = [int(u) for u in vlist]
-
-    return best_path'''
+    return [int(v) for v in best_path]
 
 
 def path_to_moves(
     g: gt.Graph, puzzle: Puzzle, path: list[int]
 ) -> list[tuple[int, str, int]]:
+    
     vp_state = g.vp["state"]
 
     moves = []
@@ -107,17 +82,15 @@ if __name__ == "__main__":
     graphml_path = Path(sys.argv[1])
     output_path  = Path(sys.argv[2])
 
-    print(f"Carregant graf {graphml_path}...")
     g = gt.load_graph(str(graphml_path))
     print(f"Graf: {g.num_vertices()} vèrtexs, {g.num_edges()} arestes")
 
     puzzle = Puzzle.from_json(g.gp["puzzle"])
 
-    print("Cercant camí mínim...")
     path = find_shortest_path(g)
 
     if path is None:
-        print("El puzzle no té solució!")
+        print("El puzzle no té solució")
         sys.exit(1)
 
     print(f"Solució trobada: {len(path) - 1} moviments")

@@ -3,7 +3,7 @@ import json
 
 URL = "https://klotski.pauek.dev/api/puzzles"
 
-def download_puzzle(puzzle_id:str) -> None:
+def download_puzzle(i: int|None ,puzzle_id:str) -> None:
     '''Given a puzzle_id (str), it creates the corresponding json file with the puzzle information'''
 
     url = URL + "/" + puzzle_id
@@ -12,12 +12,14 @@ def download_puzzle(puzzle_id:str) -> None:
 
     data_puzzle = response.json()
 
-    filename = f"puzzles/{puzzle_id}.json"
+    filename = f"puzzles/puzzle_{i}.json"
     with open(filename, 'w') as f:
         json.dump(data_puzzle["puzzle"], f, indent=4)
 
 def download_all_puzzles() -> None:
     all_url = requests.get(URL)
-    for puzzle in all_url.json():
-        download_puzzle(puzzle)
+    for i,puzzle in enumerate(all_url.json()):
+        download_puzzle(i,puzzle)
 
+if __name__ == '__main__':
+    download_all_puzzles()

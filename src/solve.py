@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from collections import deque
 
-import graph_tool.all as gt
+import graph_tool.all as gt #type:ignore
 
 from puzzle import Puzzle, State
 from graph import state_key, StateKey
@@ -22,18 +22,40 @@ def find_shortest_path(g: gt.Graph) -> list[int] | None:
     vp_is_goal  = g.vp["is_goal"]
 
     # Trobar el node inicial
-    start_idx = None
+    start_v = None
     for v in g.vertices():
         if vp_is_start[v]:
-            start_idx = int(v)
+            start_v = v
             break
 
-    if start_idx is None:
+    if start_v is None:
         raise ValueError("No s'ha trobat el node inicial al graf")
 
     # Usem shortest_path de graph-tool cap a cada node goal
     # i ens quedem amb el camí més curt
-    best_path = None
+
+    visited: dict[int, int|None] = {int(start_v): None}
+    queue = deque([start_v])
+
+    while queue:
+        v = queue.popleft()
+
+        if vp_is_goal[v]: #reconstruir el camí
+            path = []
+            current = int(v)
+            while current is not None:
+                path.append(current)
+                current = visited[current]
+            return list(reversed(path))
+
+        for neighbor in v.out_neighbors():
+            n_idx = int(neighbor)
+            if n_idx not in visited:
+                visited[n_idx] = int(v)  # guardem el pare
+                queue.append(neighbor)
+
+
+    '''best_path = None
 
     for v in g.vertices():
         if not vp_is_goal[v]:
@@ -44,7 +66,7 @@ def find_shortest_path(g: gt.Graph) -> list[int] | None:
         if best_path is None or len(vlist) < len(best_path):
             best_path = [int(u) for u in vlist]
 
-    return best_path
+    return best_path'''
 
 
 def path_to_moves(

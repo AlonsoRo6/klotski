@@ -4,8 +4,8 @@
     "min_moves": 45,
     "num_states": 7328,
     "diameter": 174,
-    "num_optimal_goals": 1,
-    "avg_clustering": 0.0
+    "articulation_points_optimal": 12,
+    "avg_branching_factor": 3.6200873362445414
   },
-  "stars": 2.87
+  "stars": 3.8
 }

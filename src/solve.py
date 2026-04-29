@@ -1,44 +1,27 @@
-"""
-Resolució d'un puzzle de peces lliscants mitjançant el graf d'estats.
-
-Ús: python src/solve.py graphs/<graf.graphml> solutions/<output.sol.json>
-"""
-
 from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path
+import graph_tool.all as gt  # type: ignore
+from puzzle import Puzzle, State
+from graph import state_key, get_normalized_id
+from logic import possible_moves, apply_move
 
-import graph_tool.all as gt #type:ignore
-
-from puzzle import Puzzle
-from graph import state_key
 
 def find_shortest_path(g: gt.Graph) -> list[int] | None:
     vp_is_start = g.vp["is_start"]
     vp_is_goal  = g.vp["is_goal"]
 
-    # Trobar el node inicial
-    start_v = None
-    for v in g.vertices():
-        if vp_is_start[v]:
-            start_v = v
-            break
-
+    start_v = next((v for v in g.vertices() if vp_is_start[v]), None)
     if start_v is None:
-        raise ValueError("No s'ha trobat el node inicial al graf")
-
+        raise ValueError("No node inicial")
 
     goals = [v for v in g.vertices() if vp_is_goal[v]]
-
     if not goals:
         return None
-    
-    #trobem el goal que està més a prop
-    dist_map = gt.shortest_distance(g, start_v) 
 
-    best_goal = min(goals, key=lambda v: dist_map[v]) # type: ignore
+    dist_map = gt.shortest_distance(g, start_v)
+    best_goal = min(goals, key=lambda v: dist_map[v])  # type: ignore
     best_path = gt.shortest_path(g, start_v, best_goal)[0]
 
     return [int(v) for v in best_path]
@@ -47,37 +30,49 @@ def find_shortest_path(g: gt.Graph) -> list[int] | None:
 def path_to_moves(
     g: gt.Graph, puzzle: Puzzle, path: list[int]
 ) -> list[tuple[int, str, int]]:
-    
+    """
+    Reconstrueix la seqüència de moviments del camí.
+
+    Estratègia: reconstruïm l'estat REAL pas a pas des de puzzle.start.
+    Per cada pas del camí, sabem l'estat normalitzat destí (guardat al graf).
+    Busquem quin moviment vàlid des de l'estat real actual porta a un estat
+    que tingui la mateixa signatura normalitzada que el node destí.
+    Així evitem qualsevol problema amb peces idèntiques reordenades.
+    """
     vp_state = g.vp["state"]
 
-    moves = []
+    moves: list[tuple[int, str, int]] = []
+    real_state: State = puzzle.start
+
     for i in range(len(path) - 1):
-        key_cur = state_key(puzzle, vp_state[g.vertex(path[i])])
-        key_nxt = state_key(puzzle, vp_state[g.vertex(path[i + 1])])
+        # Signatura normalitzada de l'estat destí al graf
+        dest_key = get_normalized_id(
+            puzzle, State(state_key(puzzle, vp_state[g.vertex(path[i + 1])]))
+        )
 
-        for piece_idx, (pos_cur, pos_nxt) in enumerate(zip(key_cur, key_nxt)):
-            if pos_cur != pos_nxt:
-                dx = pos_nxt[0] - pos_cur[0]
-                dy = pos_nxt[1] - pos_cur[1]
-
-                if dx > 0:
-                    direction, dist = "E", dx
-                elif dx < 0:
-                    direction, dist = "W", -dx
-                elif dy > 0:
-                    direction, dist = "S", dy
-                else:
-                    direction, dist = "N", -dy
-
+        # Provem tots els moviments vàlids d'un pas des de l'estat real actual
+        found = False
+        for move in possible_moves(puzzle, real_state):
+            candidate = apply_move(puzzle, real_state, move)
+            if get_normalized_id(puzzle, candidate) == dest_key:
+                piece_idx, direction, dist = move
                 moves.append((piece_idx, direction, dist))
+                real_state = candidate
+                found = True
                 break
+
+        if not found:
+            raise ValueError(
+                f"No s'ha trobat cap moviment vàlid per al pas {i} → {i+1} "
+                f"del camí. L'estat al graf pot estar corrupte."
+            )
 
     return moves
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print(f"Ús: python src/solve.py <graf.graphml> <output.sol.json>")
+        print("Ús: python src/solve.py <graf.graphml> <output.sol.json>")
         sys.exit(1)
 
     graphml_path = Path(sys.argv[1])

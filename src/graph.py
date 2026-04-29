@@ -35,10 +35,22 @@ def state_to_str(state: State) -> str:
     return ";".join(f"{x},{y}" for x, y in state.positions)
 
 
+def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: #type:ignore
+    """Genera una signatura única que ignora l'ordre de peces idèntiques."""
+    grouped: dict[tuple,list[tuple]] = {} #type: ignore
+    for i, pos in enumerate(state.positions):
+        # Fem servir les coordenades de la peça (forma) com a clau
+        shape = tuple(tuple(p) for p in puzzle.pieces[i].coords)
+        if shape not in grouped:
+            grouped[shape] = []
+        grouped[shape].append(pos)
+    
+    # Ordenem posicions de peces iguals i després les formes
+    return tuple(sorted((shape, tuple(sorted(positions))) for shape, positions in grouped.items()))
+
 def build_graph(puzzle: Puzzle) -> gt.Graph:
     """
     Construeix el graf del puzzle fent un DFS des de l'estat inicial.
-    Cada node és un estat, cada aresta és un moviment d'un pas.
     """
     g = gt.Graph(directed=False)
 
@@ -47,34 +59,43 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
     vp_is_start = g.new_vertex_property("bool")
     vp_is_goal = g.new_vertex_property("bool")
 
-    # Propietat del graf: guardem el puzzle en JSON
+    # Propietat del graf
     gp_puzzle = g.new_graph_property("string")
     gp_puzzle[g] = puzzle.to_json()
     g.graph_properties["puzzle"] = gp_puzzle
 
-    state_to_vertex: dict[State, gt.Vertex] = {}
+    # OPTIMITZACIÓ: La clau del dict és la versió normalitzada de l'estat
+    state_to_vertex: dict[tuple, gt.Vertex] = {} #type: ignore
 
     def get_or_create(state: State) -> gt.Vertex:
-        if state not in state_to_vertex:
+        key = get_normalized_id(puzzle, state) # Normalitzem aquí
+        if key not in state_to_vertex:
             v = g.add_vertex()
             vp_state[v] = state_to_str(state)
             vp_is_start[v] = (state == puzzle.start)
             vp_is_goal[v] = is_goal(puzzle, state)
-            state_to_vertex[state] = v
-        return state_to_vertex[state]
+            state_to_vertex[key] = v
+        return state_to_vertex[key]
 
-    # DFS iteratiu
+
+
     stack = [puzzle.start]
     get_or_create(puzzle.start)
-
+    
+    i = 0
     while stack:
+        if i%1000 == 0:
+            print(i)
+        i += 1
+
         state = stack.pop()
-        v_cur = state_to_vertex[state] #el vertex ja ha estat creat
+        v_cur = get_or_create(state) 
 
         for move in possible_moves(puzzle, state):
             new_state = apply_move(puzzle, state, move)
+            new_key = get_normalized_id(puzzle, new_state)
 
-            if new_state not in state_to_vertex:
+            if new_key not in state_to_vertex:
                 stack.append(new_state)
                 
             v_new = get_or_create(new_state)
@@ -82,13 +103,11 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
             if not g.edge(v_cur, v_new):
                 g.add_edge(v_cur, v_new)
 
-
     g.vertex_properties["state"] = vp_state
     g.vertex_properties["is_start"] = vp_is_start
     g.vertex_properties["is_goal"] = vp_is_goal
 
     return g
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
@@ -100,6 +119,7 @@ if __name__ == "__main__":
 
     puzzle = Puzzle.from_json(json_path.read_text())
 
+    print('Executant graph.py')
     g = build_graph(puzzle)
 
     n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])

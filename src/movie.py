@@ -133,7 +133,14 @@ if __name__ == "__main__":
     # El format és [peça, direcció, distància]. Si només hi ha 2 elements,
     # la distància és implícitament 1 (compatibilitat amb el format antic).
     raw_moves = json.loads(solution_path.read_text())
-    moves: list[Move] = [(m[0], m[1], m[2] if len(m) >= 3 else 1) for m in raw_moves]
+    
+    # Ens assegurem que cada moviment tingui (peça, direcció, distància)
+    moves: list[Move] = []
+    for m in raw_moves:
+        p_idx = int(m[0])
+        direc = str(m[1])
+        dist = int(m[2]) if len(m) >= 3 else 1
+        moves.append((p_idx, direc, dist))
 
     output = sys.argv[3] if len(sys.argv) >= 4 else puzzle_path.stem + ".gif"
 

@@ -3,9 +3,17 @@
   "metrics": {
     "min_moves": 41,
     "num_states": 2930,
+<<<<<<< HEAD
     "diameter": 54,
     "articulation_points_optimal": 6,
     "avg_branching_factor": 4.999317406143344
   },
   "stars": 3.1
+=======
+    "articulation_points_optimal": 6,
+    "avg_branching_factor": 4.999317406143344,
+    "variancia_branching_factor": 1.2876412590008626
+  },
+  "stars": 4.45
+>>>>>>> Development
 }

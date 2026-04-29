@@ -1,0 +1,11 @@
+{
+  "puzzle": "merda.json",
+  "metrics": {
+    "min_moves": 1,
+    "num_states": 9,
+    "articulation_points_optimal": 0,
+    "avg_branching_factor": 2.6666666666666665,
+    "variancia_branching_factor": 0.6666666666666666
+  },
+  "stars": 1.78
+}

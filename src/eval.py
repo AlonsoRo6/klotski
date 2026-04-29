@@ -17,7 +17,7 @@ from graph_tool.topology import shortest_distance, label_biconnected_components 
 from puzzle import Puzzle
 
 
-def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict:
+def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
     """Calcula les mètriques del graf.
     - Moviments mínims per arribar a la millor solució
     - Número total d'estats
@@ -41,7 +41,6 @@ def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict:
     num_states = g.num_vertices()
 
     #------------------------------------------
-    diameter = max([int(dist_from_start[v]) for v in g.vertices() if int(dist_from_start[v]) < 2**30])
 
     #------------------------------------------
      # Busquem el goal que tingui la distància mínima
@@ -69,66 +68,62 @@ def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict:
 
     #------------------------------------------
     # Això mesura la llibertat de moviment total del puzzle
-    total_degrees = sum(v.out_degree() for v in g.vertices())
+    branching_factor = [v.out_degree() for v in g.vertices()]
+    total_degrees = sum(branching_factor)
     avg_branching_factor = total_degrees / num_states
+    variancia = sum((bf-avg_branching_factor)**2 for bf in branching_factor) / num_states
+    std = math.sqrt(variancia)
 
     return {
         "min_moves": min_moves,
         "num_states": num_states,
-        "diameter": diameter,
         "articulation_points_optimal": num_articulation_points,
-        "avg_branching_factor": avg_branching_factor
+        "avg_branching_factor": avg_branching_factor,
+        "variancia_branching_factor": std
     }
 
 
 
-def calculate_stars(metrics: dict) -> float:
+def calculate_stars(metrics: dict, puzzle:Puzzle) -> float: # type: ignore
     """
     Calcula una valoració d'1 a 5 estrelles normalitzant cada component de 0 a 1.
     """
-    
     # 1. MOVIMENTS (min_moves) -> Rang [0, 1]
-    s_diff = metrics["min_moves"] / (metrics["min_moves"] + 15)
+    s_diff = metrics["min_moves"] / (puzzle.W*puzzle.H)
+
 
     # 2. MIDA (num_states) -> Rang [0, 1]
-    s_scale = math.log(metrics["num_states"] + 1) / (math.log(metrics["num_states"] + 1) + 2)
+    s_scale = math.log(metrics["num_states"])
 
     # 3. COLL D'AMPOLLA (Articulació) -> Rang [0, 1]
-    if metrics["min_moves"] > 0:
-        ratio_art = metrics["articulation_points_optimal"] / metrics["min_moves"]
-        s_strategy = max(0.0, 1.0 - (abs(ratio_art - 0.15) / 0.25))
-    else:
-        s_strategy = 0
+    
+    s_strategy = metrics["articulation_points_optimal"] / metrics["min_moves"]
+
 
     # 4. DECISIÓ (avg_branching_factor) -> Rang [0, 1]
     # Si s'allunya més de 2 del 3 (b_ideal), la nota és 0
-    b_ideal = 3
-    branching_factor = metrics["avg_branching_factor"]
-    if branching_factor <= 2:
-        s_branch = 0
-    else:
-        s_branch = max(0.0, 1.0 - (abs(branching_factor - b_ideal) / 2))
 
-    # 5. EXPLORACIÓ (diametre) -> Rang [0, 1]
-    if metrics["diameter"] > 0:
-        s_exploration = 1 - (metrics["min_moves"] / (metrics["diameter"]))
-    else:
-        s_exploration = 0
+    s_branch = metrics["avg_branching_factor"] * (1 + metrics["variancia_branching_factor"] / metrics["avg_branching_factor"])
 
+
+
+     
+    def sigmoid(x:float, mu:float, k:float):
+        return 1 / (1 + math.exp(-k * (x - mu)))
+
+    def gaussian(x:float, mu:float, k:float):
+        return math.exp(-k * (x - mu) ** 2)
+
+
+    f1 = sigmoid(s_diff, mu=0.80, k=8.0)
+    f2 = sigmoid(s_scale, mu=3.0, k=2.0)
+    f4 = gaussian(s_strategy,  mu=0.45, k=6.0)
+    f5 = sigmoid(s_branch, mu=4.00, k=0.5)
+    
     # PONDERACIÓ FINAL
-    # Ara totes les s_ estan entre 0.0 i 1.0
-    puntuacio_ponderada = (
-        s_diff        * 0.25 +
-        s_scale       * 0.15 +
-        s_strategy    * 0.20 + # El 30% del pes és l'estratègia
-        s_branch      * 0.25 +
-        s_exploration * 0.15
-    )
+    puntuacio =  0.30 * f1 + 0.30 * f2 + 0.20 * f4 + 0.20 * f5
 
-    # Transformació: 1 estrella base + (0 a 4 estrelles addicionals)
-    # Si puntuacio_ponderada és 1.0, el resultat és 5.0
-    # Si puntuacio_ponderada és 0.0, el resultat és 1.0
-    return round(1 + (puntuacio_ponderada * 4), 1)
+    return round(1 + (puntuacio * 4), 2)
 
 
 
@@ -152,12 +147,11 @@ if __name__ == "__main__":
     puzzle = Puzzle.from_json(puzzle_path.read_text())
 
     metrics = calculate_metrics(g, puzzle)
-    stars   = calculate_stars(metrics)
+    stars   = calculate_stars(metrics, puzzle)
 
     print(f"\n--- Resultats per a {puzzle_path.name} ---")
     print(f"  Moviments mínims:   {metrics['min_moves']}")
     print(f"  Estats totals:      {metrics['num_states']}")
-    print(f"  Diàmetre del graf:  {metrics['diameter']}")
     print(f"  Colls d'ampolla òptims:      {metrics['articulation_points_optimal']}")
     print(f"  Average branching factor:   {metrics['avg_branching_factor']:.4f}")
 

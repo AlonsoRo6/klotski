@@ -30,8 +30,13 @@ def main() -> None:
         print(f"No s'ha trobat el puzzle: {puzzle_path}")
         sys.exit(1)
 
+    print('Executant graph.py...')
     run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path)])
+    
+    print('Executant solve.py...')
     run(["python3", "src/solve.py", str(graphml_path), str(solution_path)])
+    
+    print('Executant movie.py...')
     run(["python3", "src/movie.py", str(puzzle_path), str(solution_path), str(gif_path)])
 
 

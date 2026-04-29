@@ -9,47 +9,45 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from collections import deque
 
-import graph_tool.all as gt
+import graph_tool.all as gt #type:ignore
 
-from puzzle import Puzzle, State
-from graph import state_key, StateKey
-
+from puzzle import Puzzle
+from graph import state_key
 
 def find_shortest_path(g: gt.Graph) -> list[int] | None:
     vp_is_start = g.vp["is_start"]
     vp_is_goal  = g.vp["is_goal"]
 
     # Trobar el node inicial
-    start_idx = None
+    start_v = None
     for v in g.vertices():
         if vp_is_start[v]:
-            start_idx = int(v)
+            start_v = v
             break
 
-    if start_idx is None:
+    if start_v is None:
         raise ValueError("No s'ha trobat el node inicial al graf")
 
-    # Usem shortest_path de graph-tool cap a cada node goal
-    # i ens quedem amb el camí més curt
-    best_path = None
 
-    for v in g.vertices():
-        if not vp_is_goal[v]:
-            continue
-        vlist, _ = gt.shortest_path(g, g.vertex(start_idx), v)  # type: ignore
-        if len(vlist) == 0:
-            continue
-        if best_path is None or len(vlist) < len(best_path):
-            best_path = [int(u) for u in vlist]
+    goals = [v for v in g.vertices() if vp_is_goal[v]]
 
-    return best_path
+    if not goals:
+        return None
+    
+    #trobem el goal que està més a prop
+    dist_map = gt.shortest_distance(g, start_v) 
+
+    best_goal = min(goals, key=lambda v: dist_map[v]) # type: ignore
+    best_path = gt.shortest_path(g, start_v, best_goal)[0]
+
+    return [int(v) for v in best_path]
 
 
 def path_to_moves(
     g: gt.Graph, puzzle: Puzzle, path: list[int]
 ) -> list[tuple[int, str, int]]:
+    
     vp_state = g.vp["state"]
 
     moves = []
@@ -85,17 +83,15 @@ if __name__ == "__main__":
     graphml_path = Path(sys.argv[1])
     output_path  = Path(sys.argv[2])
 
-    print(f"Carregant graf {graphml_path}...")
     g = gt.load_graph(str(graphml_path))
     print(f"Graf: {g.num_vertices()} vèrtexs, {g.num_edges()} arestes")
 
     puzzle = Puzzle.from_json(g.gp["puzzle"])
 
-    print("Cercant camí mínim...")
     path = find_shortest_path(g)
 
     if path is None:
-        print("El puzzle no té solució!")
+        print("El puzzle no té solució")
         sys.exit(1)
 
     print(f"Solució trobada: {len(path) - 1} moviments")

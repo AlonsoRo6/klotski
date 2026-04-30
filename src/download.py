@@ -19,7 +19,7 @@ def download_puzzle(i: int|None ,puzzle_id:str) -> None:
 def download_all_puzzles() -> None:
     all_url = requests.get(URL)
     for i,puzzle in enumerate(all_url.json()):
-        download_puzzle(i,puzzle)
+        download_puzzle(i+1,puzzle)
 
 if __name__ == '__main__':
     download_all_puzzles()

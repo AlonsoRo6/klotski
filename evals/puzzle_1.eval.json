@@ -1,19 +1,11 @@
 {
   "puzzle": "puzzle_1.json",
   "metrics": {
-    "min_moves": 41,
-    "num_states": 2930,
-<<<<<<< HEAD
-    "diameter": 54,
-    "articulation_points_optimal": 6,
-    "avg_branching_factor": 4.999317406143344
+    "min_moves": 45,
+    "num_states": 7328,
+    "articulation_points_optimal": 12,
+    "avg_branching_factor": 3.6200873362445414,
+    "variancia_branching_factor": 1.170875830612705
   },
-  "stars": 3.1
-=======
-    "articulation_points_optimal": 6,
-    "avg_branching_factor": 4.999317406143344,
-    "variancia_branching_factor": 1.2876412590008626
-  },
-  "stars": 4.45
->>>>>>> Development
+  "stars": 4.53
 }

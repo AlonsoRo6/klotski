@@ -2,7 +2,7 @@
   "puzzle": "2swap.json",
   "metrics": {
     "min_moves": 17,
-    "num_states": 32760,
+    "num_states": 1365,
     "articulation_points_optimal": 9,
     "avg_branching_factor": 3.1677655677655676,
     "variancia_branching_factor": 0.9196996184977847

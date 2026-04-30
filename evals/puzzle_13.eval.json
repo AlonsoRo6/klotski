@@ -1,11 +1,11 @@
 {
   "puzzle": "puzzle_13.json",
   "metrics": {
-    "min_moves": 55,
-    "num_states": 900802,
-    "articulation_points_optimal": 16,
-    "avg_branching_factor": 4.995492905211134,
-    "variancia_branching_factor": 1.5504185296973987
+    "min_moves": 52,
+    "num_states": 569138,
+    "articulation_points_optimal": 22,
+    "avg_branching_factor": 5.8676138300377065,
+    "variancia_branching_factor": 1.6456501244467874
   },
-  "stars": 4.71
+  "stars": 4.88
 }

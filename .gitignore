@@ -8,4 +8,5 @@
 .pixi/*
 !.pixi/config.toml
 
-graphs/
+graphs/*
+!graphs/.gitkeep

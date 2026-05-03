@@ -1,5 +1,5 @@
 """
-Script per solucionar un puzzle de peces lliscants de forma interactiva.
+Genera el graf, la solució i el gif de la solució d'un puzzle.
 Ús: python src/auto_solve.py
 """
 

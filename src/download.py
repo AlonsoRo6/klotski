@@ -1,3 +1,8 @@
+'''
+Descarrega tots els puzzles del repositori.
+Ús: python3 src/downolad.py
+'''
+
 import requests
 import json
 
@@ -12,7 +17,7 @@ def download_puzzle(i: int|None ,puzzle_id:str) -> None:
 
     data_puzzle = response.json()
 
-    filename = f"puzzles/puzzle_{i}.json"
+    filename = f"puzzles/puzzle_{puzzle_id}.json"
     with open(filename, 'w') as f:
         json.dump(data_puzzle["puzzle"], f, indent=4)
 

@@ -1,3 +1,9 @@
+'''
+Crea la solució d'un puzzle donat el seu graf.
+
+Ús: python3 src/solve.py <graf.graphml> <output.sol.json>
+'''
+
 from __future__ import annotations
 import json
 import sys
@@ -9,12 +15,14 @@ from logic import possible_moves, apply_move
 
 
 def find_shortest_path(g: gt.Graph) -> list[int] | None:
+    '''Donat un graf, retorna una llista amb l'índex dels estats
+    del camí més curt de l'estat inicial a un goal'''
     vp_is_start = g.vp["is_start"]
     vp_is_goal  = g.vp["is_goal"]
 
     start_v = next((v for v in g.vertices() if vp_is_start[v]), None)
     if start_v is None:
-        raise ValueError("No node inicial")
+        raise ValueError("No hi ha node inicial")
 
     goals = [v for v in g.vertices() if vp_is_goal[v]]
     if not goals:
@@ -31,12 +39,12 @@ def path_to_moves(
     g: gt.Graph, puzzle: Puzzle, path: list[int]
 ) -> list[tuple[int, str, int]]:
     """
-    Reconstrueix la seqüència de moviments del camí.
+    Reconstrueix la seqüència de moviments del camí donada una llista path amb l'índex
+    dels estats que conformen la solució més curta.
 
-    Estratègia: reconstruïm l'estat REAL pas a pas des de puzzle.start.
     Per cada pas del camí, sabem l'estat normalitzat destí (guardat al graf).
     Busquem quin moviment vàlid des de l'estat real actual porta a un estat
-    que tingui la mateixa signatura normalitzada que el node destí.
+    que tingui el mateix identificadot únic que el node destí.
     Així evitem qualsevol problema amb peces idèntiques reordenades.
     """
     vp_state = g.vp["state"]
@@ -45,7 +53,7 @@ def path_to_moves(
     real_state: State = puzzle.start
 
     for i in range(len(path) - 1):
-        # Signatura normalitzada de l'estat destí al graf
+        # Identificador únic de l'estat destí al graf
         dest_key = get_normalized_id(
             puzzle, State(state_key(puzzle, vp_state[g.vertex(path[i + 1])]))
         )
@@ -82,7 +90,6 @@ if __name__ == "__main__":
     print(f"Graf: {g.num_vertices()} vèrtexs, {g.num_edges()} arestes")
 
     puzzle = Puzzle.from_json(g.gp["puzzle"])
-
     path = find_shortest_path(g)
 
     if path is None:

@@ -1,31 +1,21 @@
 """
-Reavalua tots els puzzles que ja tenien una valoració a la carpeta evals/.
-Per cada .eval.json existent, busca el .json del puzzle i el .graphml del graf
-i torna a calcular les mètriques i les estrelles amb el codi actual d'eval.py.
+Avalua tots els puzzles que estan a la carpeta puzzles/. Si algun puzzle no tenia 
+el graf generat, crea el graf i després fa la valoració. 
 
-Ús: python reeval.py
-     python reeval.py --puzzles puzzles/ --graphs graphs/ --evals evals/
+Ús: python3 src/reeval.py
 """
 
 from __future__ import annotations
 
-import subprocess
 import json
 import sys
 from pathlib import Path
 
-# Importem les funcions directament d'eval.py (sense el bloc __main__)
-from eval import calculate_metrics, calculate_stars
+from eval import calculate_metrics, calculate_stars_2
+from auto_solve import run
 from puzzle import Puzzle
 import graph_tool.all as gt  # type: ignore
 
-
-def run(cmd: list[str]) -> None:
-    print(f"\n$ {' '.join(cmd)}") 
-    result = subprocess.run(cmd, text=True)
-    if result.returncode != 0:
-        print(f"Error executant: {' '.join(cmd)}")
-        sys.exit(1)
 
 def reeval_all(
     puzzles_dir: Path,
@@ -33,7 +23,7 @@ def reeval_all(
     evals_dir: Path,
 ) -> None:
     
-    # Busquem tots els fitxers .eval.json existents
+    # Busquem tots els fitxers .json existents
     eval_files = list(puzzles_dir.glob("*.json"))
 
     if not eval_files:
@@ -42,41 +32,27 @@ def reeval_all(
 
     print(f"Trobats {len(eval_files)} puzzles per valorar. Avaluant...\n")
 
-    ok = 0
-    errors = []
 
     for eval_path in eval_files:
-        # El nom del puzzle el traiem del propi .eval.json o del nom del fitxer.
-        # El fitxer es diu, p.ex., "puzzle_0.eval.json" → puzzle és "puzzle_0.json"
-        puzzle_name = eval_path.name
-        puzzle_path = puzzles_dir / puzzle_name
+        # El fitxer es diu, p.ex., "puzzle_0.json" → puzzle és "puzzle_0"
+        puzzle_name = eval_path.name #nom del puzzle
+        puzzle_path = puzzles_dir / puzzle_name #puzzle.json
         
         graph_name  = eval_path.name.replace(".json", ".graphml")
-        graph_path  = graphs_dir / graph_name
+        graph_path  = graphs_dir / graph_name #graphs/puzzle.graphml
 
         eval_name = puzzle_path.name.replace(".json", ".eval.json")
-        eval_path = evals_dir / eval_name
-
-        # Comprovacions
-        missing = []
-        if not puzzle_path.exists():
-            missing.append(str(puzzle_path))
+        eval_path = evals_dir / eval_name #evals/puzzle.eval.json
        
         if not graph_path.exists():
             run(["python3", "src/graph.py", str(puzzle_path), str(graph_path)])
-            missing.append(str(graph_path))
-        
-        if missing:
-            msg = f"  ✗ {puzzle_name}: falten fitxers: {', '.join(missing)}"
-            print(msg)
-            errors.append(msg)
-            continue
+
 
         puzzle = Puzzle.from_json(puzzle_path.read_text())
         g = gt.load_graph(str(graph_path))
 
         metrics = calculate_metrics(g, puzzle)
-        stars = calculate_stars(metrics, puzzle)
+        stars = calculate_stars_2(metrics, puzzle)
 
         result = {
             "puzzle":  puzzle_name,
@@ -92,14 +68,7 @@ def reeval_all(
             f"{metrics['num_states']:6d} estats  "
             f"{stars:.2f}/5.0"
         )
-        ok += 1
-
-
-    print(f"\nFet: {ok}/{len(eval_files)} reavalauts correctament.")
-    if errors:
-        print(f"\nErrors ({len(errors)}):")
-        for e in errors:
-            print(e)
+        print()
 
 
 if __name__ == "__main__":

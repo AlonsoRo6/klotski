@@ -1,5 +1,5 @@
 """
-Construcció del graf d'un puzzle de peces lliscants.
+Construcció del graf d'un puzzle.
 
 Ús: python src/graph.py <puzzle.json> <output.graphml>
 """
@@ -36,10 +36,10 @@ def state_to_str(state: State) -> str:
 
 
 def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: #type:ignore
-    """Genera una signatura única que ignora l'ordre de peces idèntiques."""
+    """Genera un identificador únic que ignora l'ordre de peces idèntiques."""
     grouped: dict[tuple,list[tuple]] = {} #type: ignore
+    
     for i, pos in enumerate(state.positions):
-        # Fem servir les coordenades de la peça (forma) com a clau
         shape = tuple(tuple(p) for p in puzzle.pieces[i].coords)
         if shape not in grouped:
             grouped[shape] = []
@@ -47,6 +47,7 @@ def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: #type:ignore
     
     # Ordenem posicions de peces iguals i després les formes
     return tuple(sorted((shape, tuple(sorted(positions))) for shape, positions in grouped.items()))
+
 
 def build_graph(puzzle: Puzzle) -> gt.Graph:
     """
@@ -64,12 +65,12 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
     gp_puzzle[g] = puzzle.to_json()
     g.graph_properties["puzzle"] = gp_puzzle
 
-    # OPTIMITZACIÓ: La clau del dict és la versió normalitzada de l'estat
+    #La clau del diccionari és la versió normalitzada de l'estat
     state_to_vertex: dict[tuple, gt.Vertex] = {} #type: ignore
 
     def get_or_create(state: State) -> gt.Vertex:
-        key = get_normalized_id(puzzle, state) # Normalitzem aquí
-        if key not in state_to_vertex:
+        key = get_normalized_id(puzzle, state) # Normalitzem l'estat
+        if key not in state_to_vertex: #si encara no l'havíem visitat: creem
             v = g.add_vertex()
             vp_state[v] = state_to_str(state)
             vp_is_start[v] = (state == puzzle.start)
@@ -78,16 +79,10 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
         return state_to_vertex[key]
 
 
-
     stack = [puzzle.start]
     get_or_create(puzzle.start)
     
-    i = 0
     while stack:
-        if i%1000 == 0:
-            print(i)
-        i += 1
-
         state = stack.pop()
         v_cur = get_or_create(state) 
 

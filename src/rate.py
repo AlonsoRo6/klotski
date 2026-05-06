@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import sys
-import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -36,7 +35,7 @@ def load_stars(puzzle_path: Path) -> float:
     return float(data["stars"])
 
 
-def post_vote(puzzle_id: str, stars: float, token: str) -> None:
+def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
     url     = f"{BASE_URL}/api/puzzles/{puzzle_id}/votes"
     payload = json.dumps({"stars": stars}).encode("utf-8")
 
@@ -53,13 +52,11 @@ def post_vote(puzzle_id: str, stars: float, token: str) -> None:
     try:
         with urllib.request.urlopen(req) as resp:
             resp.read()
+            return True
     
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Error HTTP {e.code}: {body[:300]}")
-    
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Error de connexió: {e.reason}")
+    except Exception as e:
+        print(f"  [!] Error enviant {puzzle_id}: {e}")
+        return False
 
 
 if __name__ == "__main__":

@@ -34,7 +34,9 @@ if __name__ == "__main__":
     for eval_path in eval_files:
         try:
             # 1. Obtenir l'ID del puzzle
-            puzzle_id = puzzle_id_from_path(eval_path)
+            puzzle_filename = eval_path.name.replace(".eval.json", ".json")
+            puzzle_path = eval_path.with_name(puzzle_filename)
+            puzzle_id = puzzle_id_from_path(puzzle_path)
             
             # 2. Llegir les estrelles
             data = json.loads(eval_path.read_text())

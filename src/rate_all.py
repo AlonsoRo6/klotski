@@ -1,54 +1,56 @@
 """
-Envia TOTS els .eval.json de la carpeta 'evals' al repositori klotski.pauek.dev.
+Envia TOTES les valoracions guardades al fitxer 'puzzles_metrics.csv' al repositori klotski.pauek.dev.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
-from rate import post_vote, puzzle_id_from_path
+import pandas as pd
+from rate import post_vote
 
-BASE_URL  = "https://klotski.pauek.dev"
-EVALS_DIR = Path("evals")
-PUZZLES_DIR = Path("puzzles")
-
+CSV_PATH = Path("puzzles_metrics.csv")
 
 if __name__ == "__main__":
     token = '019d90b1-6a3c-7000-ad15-514895909854'
     
-    if not EVALS_DIR.exists():
-        print(f"Error: La carpeta '{EVALS_DIR}' no existeix.")
+    if not CSV_PATH.exists():
+        print(f"Error: El fitxer '{CSV_PATH}' no existeix.")
+        print("Executa primer 'eval_all.py' (o eval.py per a cada puzzle) per generar el CSV.")
         sys.exit(1)
 
-    # Busquem tots els fitxers .eval.json dins la carpeta evals
-    eval_files = list(EVALS_DIR.glob("*.eval.json"))
+    try:
+        df = pd.read_csv(CSV_PATH)
+    except Exception as e:
+        print(f"Error llegint el CSV: {e}")
+        sys.exit(1)
     
-    if not eval_files:
-        print("No s'han trobat fitxers .eval.json a la carpeta.")
+    if df.empty:
+        print("El fitxer CSV està buit.")
         sys.exit(0)
 
-    print(f"S'han trobat {len(eval_files)} valoracions. Començant l'enviament...")
+    total_puzzles = len(df)
+    print(f"S'han trobat {total_puzzles} valoracions al CSV.")
 
     success_count = 0
-    for eval_path in eval_files:
+    
+    # Iterem per cada fila del DataFrame
+    for _, row in df.iterrows():
         try:
-            # 1. Obtenir l'ID del puzzle
-            puzzle_filename = eval_path.name.replace(".eval.json", ".json")
-            puzzle_path = eval_path.with_name(puzzle_filename)
-            puzzle_id = puzzle_id_from_path(puzzle_path)
+            puzzle_id = str(row['id'])
+            stars = float(row['score'])
             
-            # 2. Llegir les estrelles
-            data = json.loads(eval_path.read_text())
-            stars = float(data["stars"])
-            
-            # 3. Enviar
             if post_vote(puzzle_id, stars, token):
-                print(f"✓ {puzzle_id}: {stars:.2f}★ enviat correctament.")
+                print(f"{puzzle_id}: {stars:.2f} enviat correctament.")
                 success_count += 1
+            else:
+                print(f"Error enviant el puzzle {puzzle_id}.")
             
+        except KeyError as e:
+            print(f"Error: Falta la columna {e} al CSV.")
+            break
         except Exception as e:
-            print(f"✘ Error processant {eval_path.name}: {e}")
+            print(f"Error inesperat processant la fila: {e}")
 
     print(f"\n--- Procés finalitzat ---")
-    print(f"S'han enviat correctament {success_count} de {len(eval_files)} puzzles.")
+    print(f"S'han enviat correctament {success_count} de {total_puzzles} puzzles.")

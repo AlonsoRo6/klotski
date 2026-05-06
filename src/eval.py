@@ -15,6 +15,9 @@ import graph_tool.all as gt  # type: ignore
 from graph_tool.topology import shortest_distance, label_biconnected_components  # type: ignore
 
 from puzzle import Puzzle
+import os
+import pandas as pd # Utilitzem pandas per facilitar la gestió del CSV
+from typing import Any
 
 
 def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
@@ -69,15 +72,13 @@ def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
     branching_factor = [v.out_degree() for v in g.vertices()]
     total_degrees = sum(branching_factor)
     avg_branching_factor = total_degrees / num_states
-    variancia = sum((bf-avg_branching_factor)**2 for bf in branching_factor) / num_states
-    std = math.sqrt(variancia)
 
     return {
+        "size": puzzle.W * puzzle.H,
         "min_moves": min_moves,
         "num_states": num_states,
         "articulation_points_optimal": num_articulation_points,
         "avg_branching_factor": avg_branching_factor,
-        "variancia_branching_factor": std
     }
 
 
@@ -135,6 +136,55 @@ def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
     return round(1 + score * 4)
 
 
+
+
+CSV_PATH = 'puzzles_metrics.csv'
+
+def save_metrics_to_csv(puzzle_id: str, metrics: dict[str, Any], score: float) -> None:
+    """
+    Guarda o actualitza les mètriques d'un puzzle al fitxer CSV, mantenint les notes manuals.
+    """
+    # Estructura de la nova fila
+    new_data: dict[str, Any] = {
+        'id': puzzle_id,
+        'size': metrics["size"],
+        'min_moves': metrics['min_moves'],
+        'total_states': metrics['num_states'],
+        'articulation_points': metrics['articulation_points_optimal'],
+        'avg_branching': metrics['avg_branching_factor'],
+        'score': score,
+        'manual_score': None  # Es mantindrà si ja existia
+    }
+
+    df: pd.DataFrame
+    if os.path.exists(CSV_PATH):
+        df = pd.read_csv(CSV_PATH)
+        
+        # Comprovar si el puzzle ja és al CSV per no duplicar i mantenir la nota manual
+        if puzzle_id in df['id'].values:
+            idx = df[df['id'] == puzzle_id].index[0]
+            
+            # Preservem la manual_score actual si no és nul·la
+            current_manual = df.at[idx, 'manual_score']
+            new_data['manual_score'] = current_manual
+            
+            # Actualitzem els valors de la fila existent
+            for key, value in new_data.items():
+                df.at[idx, key] = value
+        else:
+            # Si el puzzle és nou, l'afegim com a nova fila
+            df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+    else:
+        # Si el fitxer no existeix, el creem de zero amb la primera fila
+        df = pd.DataFrame([new_data])
+
+    # Guardem el fitxer (sobrescrivint l'anterior amb les dades actualitzades)
+    df.to_csv(CSV_PATH, index=False)
+    print(f"Mètriques de '{puzzle_id}' actualitzades al CSV.")
+    
+
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Ús: python src/eval.py <puzzle.json> <graphs/puzzle.graphml>")
@@ -154,25 +204,12 @@ if __name__ == "__main__":
     g = gt.load_graph(str(graphml_path))
     puzzle = Puzzle.from_json(puzzle_path.read_text())
 
+
+    puzzle_id = puzzle_path.stem.split("_")[-1]
     metrics = calculate_metrics(g, puzzle)
-    stars   = calculate_stars_2(metrics, puzzle)
-
-    print(f"\n--- Resultats per a {puzzle_path.name} ---")
-    print(f"  Moviments mínims:   {metrics['min_moves']}")
-    print(f"  Estats totals:      {metrics['num_states']}")
-    print(f"  Colls d'ampolla òptims:      {metrics['articulation_points_optimal']}")
-    print(f"  Average branching factor:   {metrics['avg_branching_factor']:.4f}")
-
-    print(f"\n  ⭐ Valoració: {stars} / 5.0")
+    score = calculate_stars_2(metrics, puzzle)
+    save_metrics_to_csv(puzzle_id, metrics, score)
 
 
-    result = {
-        "puzzle":   puzzle_path.name,
-        "metrics":  metrics,
-        "stars":    stars,
-    }
-    
-    evals_dir = Path("evals")
-    evals_dir.mkdir(parents=True, exist_ok=True)
-    output = evals_dir / puzzle_path.with_suffix(".eval.json").name
-    output.write_text(json.dumps(result, indent=2))
+    print(f"\n--- Resultat per a {puzzle_path.name} ---")
+    print(f"\n  ⭐ Valoració: {score} / 5.0")

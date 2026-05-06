@@ -1,6 +1,6 @@
 """
 Envia la valoració d'un puzzle al repositori klotski.pauek.dev.
-Llegeix la puntuació del fitxer .eval.json generat per eval.py.
+Llegeix la puntuació del fitxer puzzles_metrics.csv generat per eval.py.
 L'ID del puzzle s'extreu del nom del fitxer (format: puzzle_N_<id>.json).
 
 Ús: python rate.py <puzzle_N_<id>.json> <token>
@@ -12,31 +12,43 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
+import pandas as pd  # Importat per llegir el CSV centralitzat
 
-BASE_URL  = "https://klotski.pauek.dev"
-EVALS_DIR = Path("evals")
+BASE_URL = "https://klotski.pauek.dev"
+CSV_PATH = Path("puzzles_metrics.csv")
 
 
 def puzzle_id_from_path(puzzle_path: Path) -> str:
     """Extreu l'ID del puzzle a partir del nom del fitxer (puzzle_<id>.json)."""
-    # puzzle_path.stem ens dona el nom sense l'extensió .json (ex: "puzzle_123")
-    # .split("_") divideix la cadena per l'guionet baix
-    # [-1] agafa l'última part de la llista resultant
     return puzzle_path.stem.split("_")[-1]
 
 
-def load_stars(puzzle_path: Path) -> float:
-    eval_path = EVALS_DIR / puzzle_path.with_suffix(".eval.json").name
-    if not eval_path.exists():
-        print(f"Error: no s'ha trobat '{eval_path}'.")
-        print(f"  Executa primer: python eval.py {puzzle_path} <graf.graphml>")
+def load_stars_from_csv(puzzle_id: str) -> float:
+    """Cerca la puntuació del puzzle al fitxer CSV centralitzat."""
+    if not CSV_PATH.exists():
+        print(f"Error: no s'ha trobat el fitxer '{CSV_PATH}'.")
+        print("Executa primer 'eval.py' per generar les mètriques al CSV.")
         sys.exit(1)
-    data = json.loads(eval_path.read_text())
-    return float(data["stars"])
+
+    try:
+        df = pd.read_csv(CSV_PATH)
+        # Busquem la fila que coincideixi amb l'ID
+        row = df[df['id'] == puzzle_id]
+
+        if row.empty:
+            print(f"Error: L'ID '{puzzle_id}' no existeix al CSV.")
+            sys.exit(1)
+
+        # Retornem el valor de la columna 'score'
+        return float(row.iloc[0]['score'])
+    
+    except Exception as e:
+        print(f"Error llegint el CSV: {e}")
+        sys.exit(1)
 
 
 def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
-    url     = f"{BASE_URL}/api/puzzles/{puzzle_id}/votes"
+    url = f"{BASE_URL}/api/puzzles/{puzzle_id}/votes"
     payload = json.dumps({"stars": stars}).encode("utf-8")
 
     req = urllib.request.Request(
@@ -60,15 +72,18 @@ def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
 
 
 if __name__ == "__main__":
-
-    if len(sys.argv) < 3:
-        print("Ús: python rate.py <puzzle_N_<id>.json> <token>")
+    # Ara el token es pot passar per argument o mantenir el fix segons el teu codi original
+    if len(sys.argv) < 2:
+        print("Ús: python rate.py <puzzle_<id>.json>")
         sys.exit(1)
 
     puzzle_path = Path(sys.argv[1])
-    token = '019d90b1-6a3c-7000-ad15-514895909854'
+    token = '019d90b1-6a3c-7000-ad15-514895909854'    
     puzzle_id = puzzle_id_from_path(puzzle_path)
-    stars = load_stars(puzzle_path)
+    
+    stars = load_stars_from_csv(puzzle_id)
 
-    post_vote(puzzle_id, stars, token)
-    print(f"✓ Valoració {stars:.2f}★ enviada per a '{puzzle_path.name}'.")
+    if post_vote(puzzle_id, stars, token):
+        print(f"Valoració {stars:.2f} extreta del CSV i enviada per a '{puzzle_path.name}'.")
+    else:
+        print(f"No s'ha pogut enviar la valoració de '{puzzle_path.name}'.")

@@ -2,7 +2,7 @@
 Avalua tots els puzzles que estan a la carpeta puzzles/. Si algun puzzle no tenia 
 el graf generat, crea el graf i després fa la valoració. 
 
-Ús: python3 src/reeval.py
+Ús: python3 src/eval_all.py
 """
 
 from __future__ import annotations

@@ -41,7 +41,7 @@ def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
     num_states = g.num_vertices()
 
     #------------------------------------------
-     # Busquem el goal que tingui la distància mínima
+    # Busquem el goal que tingui la distància mínima
     best_goal = min(goal_vertices, key=lambda v: dist_from_start[v]) #type: ignore
     min_total_dist = int(dist_from_start[best_goal])
 
@@ -132,7 +132,7 @@ def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
         0.15 * llibertat    # òptim: branching moderat
     )
 
-    return round(1 + score * 4, 2)
+    return round(1 + score * 4)
 
 
 if __name__ == "__main__":

@@ -14,16 +14,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from puzzle import Puzzle
-
 BASE_URL  = "https://klotski.pauek.dev"
 EVALS_DIR = Path("evals")
 
 
 def puzzle_id_from_path(puzzle_path: Path) -> str:
-    """Extreu l'ID complet del puzzle consultant el hash del contingut."""
-    puzzle = Puzzle.from_json(puzzle_path.read_text())
-    return puzzle.hash()
+    """Extreu l'ID del puzzle a partir del nom del fitxer (puzzle_<id>.json)."""
+    # puzzle_path.stem ens dona el nom sense l'extensió .json (ex: "puzzle_123")
+    # .split("_") divideix la cadena per l'guionet baix
+    # [-1] agafa l'última part de la llista resultant
+    return puzzle_path.stem.split("_")[-1]
 
 
 def load_stars(puzzle_path: Path) -> float:

@@ -1,6 +1,6 @@
 '''
 Descarrega tots els puzzles del repositori.
-Ús: python3 src/downolad.py
+Ús: python3 src/download.py
 '''
 
 import requests

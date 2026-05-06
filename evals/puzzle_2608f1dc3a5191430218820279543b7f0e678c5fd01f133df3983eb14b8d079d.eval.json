@@ -1,5 +1,5 @@
 {
-  "puzzle": "puzzle_3.json",
+  "puzzle": "puzzle_2608f1dc3a5191430218820279543b7f0e678c5fd01f133df3983eb14b8d079d.json",
   "metrics": {
     "min_moves": 62,
     "num_states": 35307,
@@ -7,5 +7,5 @@
     "avg_branching_factor": 4.329339790976293,
     "variancia_branching_factor": 1.457748289824767
   },
-  "stars": 3.43
+  "stars": 3
 }

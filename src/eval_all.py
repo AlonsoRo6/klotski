@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from eval import calculate_metrics, calculate_stars_2, save_metrics_to_csv
+from eval import calculate_metrics, calculate_stars_2, save_metrics_to_csv, predict_score_ml
 from auto_solve import run
 from puzzle import Puzzle
 import graph_tool.all as gt  # type: ignore
@@ -50,8 +50,15 @@ def reeval_all(
         
         puzzle_id = puzzle_path.stem.split("_")[-1]
         metrics = calculate_metrics(g, puzzle)
-        score = calculate_stars_2(metrics, puzzle)
-        
+        ml_score = predict_score_ml(metrics)
+
+        if ml_score is not None:
+            score = int(round(ml_score))
+            print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
+        else:
+            score = calculate_stars_2(metrics, puzzle) # formula per defecte
+            print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
+
         save_metrics_to_csv(puzzle_id, metrics, score)
 
         print(f"--- Resultat per a {puzzle_path.name} ---")

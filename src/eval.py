@@ -6,19 +6,39 @@ Avalua un puzzle fent servir unes mètriques específiques, i guarda la valoraci
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 import math
-
 import graph_tool.all as gt  # type: ignore
 from graph_tool.topology import shortest_distance, label_biconnected_components  # type: ignore
-
 from puzzle import Puzzle
 import os
-import pandas as pd # Utilitzem pandas per facilitar la gestió del CSV
+import pandas as pd 
 from typing import Any
+import joblib #type:ignore
 
+MODEL_PATH = 'model_difficulty.pkl'
+
+def predict_score_ml(metrics: dict[str, Any]) -> float | None:
+    """Intenta predir la nota usant el model de ML."""
+    if not os.path.exists(MODEL_PATH):
+        return None
+    
+    try:
+        model = joblib.load(MODEL_PATH)
+        # Preparar les dades en el mateix ordre que l'entrenament
+        features = pd.DataFrame([{
+            'size': metrics['size'],
+            'min_moves': metrics['min_moves'],
+            'total_states': metrics['num_states'],
+            'articulation_points': metrics['articulation_points_optimal'],
+            'avg_branching': metrics['avg_branching_factor']
+        }])
+        prediction = model.predict(features)[0]
+        return round(float(prediction), 2)
+    except Exception as e:
+        print(f"Error en la predicció: {e}")
+        return None
 
 def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
     """Calcula les mètriques del graf.
@@ -207,7 +227,15 @@ if __name__ == "__main__":
 
     puzzle_id = puzzle_path.stem.split("_")[-1]
     metrics = calculate_metrics(g, puzzle)
-    score = calculate_stars_2(metrics, puzzle)
+    ml_score = predict_score_ml(metrics)
+
+    if ml_score is not None:
+        score = int(round(ml_score))
+        print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
+    else:
+        score = calculate_stars_2(metrics, puzzle) # Teva fórmula actual per defecte
+        print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
+
     save_metrics_to_csv(puzzle_id, metrics, score)
 
 

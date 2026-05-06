@@ -35,18 +35,38 @@ def state_to_str(state: State) -> str:
     return ";".join(f"{x},{y}" for x, y in state.positions)
 
 
-def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: #type:ignore
-    """Genera un identificador únic que ignora l'ordre de peces idèntiques."""
-    grouped: dict[tuple,list[tuple]] = {} #type: ignore
+def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: #type: ignore
+    """
+    Genera un identificador únic que ignora l'ordre de peces idèntiques,
+    però mantenint fixes les peces que apareixen als objectius (goal pieces),
+    per evitar que la normalització confongui estats on la peça objectiu
+    és a la posició meta amb estats on és una altra peça idèntica la que hi és.
+    """
     
+    # Índexs de les peces que apareixen com a objectiu (no intercanviables)
+    goal_piece_indices: set[int] = {i for i, _ in puzzle.goals}
+
+    fixed: list[tuple] = [] #type: ignore | peces objectiu: es guarden amb el seu índex
+  
+    grouped: dict[tuple, list[tuple]] = {} #type: ignore | peces lliures: agrupades per forma
+
     for i, pos in enumerate(state.positions):
         shape = tuple(tuple(p) for p in puzzle.pieces[i].coords)
-        if shape not in grouped:
-            grouped[shape] = []
-        grouped[shape].append(pos)
-    
-    # Ordenem posicions de peces iguals i després les formes
-    return tuple(sorted((shape, tuple(sorted(positions))) for shape, positions in grouped.items()))
+        if i in goal_piece_indices:
+            # La peça objectiu es tracta com a única: l'índex forma part de la clau
+            fixed.append((i, shape, pos))
+        else:
+            # Les peces no-objectiu amb la mateixa forma són intercanviables
+            if shape not in grouped:
+                grouped[shape] = []
+            grouped[shape].append(pos)
+
+    free_part = tuple(
+        sorted((shape, tuple(sorted(positions))) for shape, positions in grouped.items())
+    )
+    fixed_part = tuple(sorted(fixed))
+
+    return (fixed_part, free_part)
 
 
 def build_graph(puzzle: Puzzle) -> gt.Graph:

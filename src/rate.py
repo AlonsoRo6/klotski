@@ -49,7 +49,7 @@ def load_stars_from_csv(puzzle_id: str) -> float:
 
 def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
     url = f"{BASE_URL}/api/puzzles/{puzzle_id}/votes"
-    payload = json.dumps({"stars": stars}).encode("utf-8")
+    payload = json.dumps({"stars": round(stars)}).encode("utf-8")
 
     req = urllib.request.Request(
         url,
@@ -72,7 +72,6 @@ def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
 
 
 if __name__ == "__main__":
-    # Ara el token es pot passar per argument o mantenir el fix segons el teu codi original
     if len(sys.argv) < 2:
         print("Ús: python rate.py <puzzle_<id>.json>")
         sys.exit(1)

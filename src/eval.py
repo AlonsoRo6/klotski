@@ -58,10 +58,11 @@ def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
     dist_from_start = shortest_distance(g, start_vertex)
 
     #------------------------------------------
-    min_moves = min(int(dist_from_start[v]) for v in goal_vertices)
+    min_moves = min(int(dist_from_start[v]) for v in goal_vertices)    
     
     #------------------------------------------
     num_states = g.num_vertices()
+
 
     #------------------------------------------
     # Busquem el goal que tingui la distància mínima
@@ -230,7 +231,7 @@ if __name__ == "__main__":
     ml_score = predict_score_ml(metrics)
 
     if ml_score is not None:
-        score = int(round(ml_score))
+        score = ml_score
         print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
     else:
         score = calculate_stars_2(metrics, puzzle) # Teva fórmula actual per defecte

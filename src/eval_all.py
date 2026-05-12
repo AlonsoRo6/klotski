@@ -53,7 +53,7 @@ def reeval_all(
         ml_score = predict_score_ml(metrics)
 
         if ml_score is not None:
-            score = int(round(ml_score))
+            score = ml_score
             print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
         else:
             score = calculate_stars_2(metrics, puzzle) # formula per defecte

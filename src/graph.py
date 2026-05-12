@@ -43,7 +43,6 @@ def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: #type: ignore
     és a la posició meta amb estats on és una altra peça idèntica la que hi és.
     """
     
-    # Índexs de les peces que apareixen com a objectiu (no intercanviables)
     goal_piece_indices: set[int] = {i for i, _ in puzzle.goals}
 
     fixed: list[tuple] = [] #type: ignore | peces objectiu: es guarden amb el seu índex
@@ -101,8 +100,11 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
 
     stack = [puzzle.start]
     get_or_create(puzzle.start)
-    
+    i = 0
     while stack:
+        if(i%1000 == 0):
+            print(i)
+        i += 1
         state = stack.pop()
         v_cur = get_or_create(state) 
 

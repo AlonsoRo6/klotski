@@ -87,7 +87,6 @@ if __name__ == "__main__":
     output_path  = Path(sys.argv[2])
 
     g = gt.load_graph(str(graphml_path))
-    print(f"Graf: {g.num_vertices()} vèrtexs, {g.num_edges()} arestes")
 
     puzzle = Puzzle.from_json(g.gp["puzzle"])
     path = find_shortest_path(g)
@@ -101,3 +100,4 @@ if __name__ == "__main__":
     moves = path_to_moves(g, puzzle, path)
     output_path.write_text(json.dumps([[p, d, dist] for p, d, dist in moves]))
     print(f"Solució guardada a {output_path}")
+    

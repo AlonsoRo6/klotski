@@ -100,11 +100,7 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
 
     stack = [puzzle.start]
     get_or_create(puzzle.start)
-    i = 0
     while stack:
-        if(i%1000 == 0):
-            print(i)
-        i += 1
         state = stack.pop()
         v_cur = get_or_create(state) 
 

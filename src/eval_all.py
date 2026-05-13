@@ -14,6 +14,7 @@ from eval import calculate_metrics, calculate_stars_2, save_metrics_to_csv, pred
 from auto_solve import run
 from puzzle import Puzzle
 import graph_tool.all as gt  # type: ignore
+import time
 
 
 def reeval_all(
@@ -44,26 +45,40 @@ def reeval_all(
         if not graph_path.exists():
             run(["python3", "src/graph.py", str(puzzle_path), str(graph_path)])
 
-
         puzzle = Puzzle.from_json(puzzle_path.read_text())
-        g = gt.load_graph(str(graph_path))
+
+        found = False
+        for attempt in range(3):
+            try:
+                g = gt.load_graph(str(graph_path))
+                found = True
+                break
+            except OSError as e:
+                if attempt < 2:
+                    print(f"Avís: Error llegint {graph_path.name}, reintentant en 0.5s...")
+                    time.sleep(0.5)
+                else:
+                    print(f"Error definitiu en {graph_path}: {e}\n")
+                    found = False
+                    continue
         
-        puzzle_id = puzzle_path.stem.split("_")[-1]
-        metrics = calculate_metrics(g, puzzle)
-        ml_score = predict_score_ml(metrics)
+        if found:
+            puzzle_id = puzzle_path.stem.split("_")[-1]
+            metrics = calculate_metrics(g, puzzle) #type:ignore
+            ml_score = predict_score_ml(metrics)
 
-        if ml_score is not None:
-            score = ml_score
-            print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
-        else:
-            score = calculate_stars_2(metrics, puzzle) # formula per defecte
-            print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
+            if ml_score is not None:
+                score = ml_score
+                print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
+            else:
+                score = calculate_stars_2(metrics, puzzle) # formula per defecte
+                print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
 
-        save_metrics_to_csv(puzzle_id, metrics, score)
+            save_metrics_to_csv(puzzle_id, metrics, score)
 
-        print(f"--- Resultat per a {puzzle_path.name} ---")
-        print(f" ⭐ Valoració: {score} / 5.0")
-        print()
+            print(f"--- Resultat per a {puzzle_path.name} ---")
+            print(f" ⭐ Valoració: {score} / 5.0")
+            print()
 
 
 if __name__ == "__main__":

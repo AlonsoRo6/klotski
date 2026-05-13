@@ -22,6 +22,8 @@ Exemples:
 from __future__ import annotations
 
 import argparse
+import heapq
+import itertools
 import json
 import math
 import random
@@ -81,10 +83,74 @@ def _build_puzzle(W: int, H: int,
 
 
 # ════════════════════════════════════════════════════════════════════════════
+#  FILTRE RÀPID AMB A* (A estrella)
+# ════════════════════════════════════════════════════════════════════════════
+
+def _heuristic(puzzle: Puzzle, state: State) -> int:
+    """
+    Heurística admissible: Distància de Manhattan entre la peça objectiu i la seva
+    posició final.
+    """
+    h = 0
+    for goal_idx, (gx, gy) in puzzle.goals:
+        sx, sy = state.positions[goal_idx]
+        h += abs(sx - gx) + abs(sy - gy)
+    return h
+
+
+def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
+    """
+    Cerca informada amb A* per trobar el nombre mínim de moviments ràpidament.
+    Retorna el nombre de moviments de la solució òptima, o None si no en té
+    (o si supera el límit d'estats explorats).
+    """
+    print('a')
+    start_pos = puzzle.start.positions
+    
+    # Cua de prioritats: (f, g, counter, state_positions)
+    # El counter desempatarà quan la f i la g siguin iguals
+    counter = itertools.count()
+    
+    h_start = _heuristic(puzzle, puzzle.start)
+    queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, next(counter), start_pos)]
+    
+    # Registre del menor cost (g) trobat fins ara per a cada estat
+    best_g: dict[tuple, int] = {start_pos: 0}
+    
+    num_states = 0
+    
+    while queue and num_states < max_states:
+        f, g, _, pos_tuple = heapq.heappop(queue)
+        state = State(pos_tuple)
+        
+        # Si ja havíem trobat un camí millor prèviament cap a aquest estat, l'ignorem
+        if g > best_g.get(pos_tuple, float('inf')):
+            continue
+            
+        if is_goal(puzzle, state):
+            return g
+            
+        num_states += 1
+        
+        for move in possible_moves(puzzle, state):
+            nstate = apply_move(puzzle, state, move)
+            nb = nstate.positions
+            new_g = g + 1
+            
+            # Només afegim a la cua si hem trobat un camí estrictament millor
+            if new_g < best_g.get(nb, float('inf')):
+                best_g[nb] = new_g
+                h = _heuristic(puzzle, nstate)
+                heapq.heappush(queue, (new_g + h, new_g, next(counter), nb))
+                
+    return None
+
+
+# ════════════════════════════════════════════════════════════════════════════
 #  BFS COMPLET per avaluació (sense graph-tool)
 # ════════════════════════════════════════════════════════════════════════════
 
-def _full_bfs(puzzle: Puzzle, max_states: int = 100_000) -> dict:
+def _full_bfs(puzzle: Puzzle, max_states: int = 750_000) -> dict:
     """
     BFS complet des de l'estat inicial.
 
@@ -103,7 +169,8 @@ def _full_bfs(puzzle: Puzzle, max_states: int = 100_000) -> dict:
         articulation_points (estimació), reachable, truncated
     """
     from collections import deque
-
+    
+    print('b')
     start = puzzle.start.positions
 
     # dist[estat] = profunditat mínima des de l'inici
@@ -573,23 +640,32 @@ def generate_batch(strategy: str = "classic",
     max_attempts = count * 300  # evita bucle infinit
 
     while len(generated) < count and attempts < max_attempts:
+        print(attempts)
         attempts += 1
 
         puzzle = gen_fn(rng)
         if puzzle is None:
             continue
 
-        # BFS complet: obté totes les mètriques que necessita el model
+        # --- FASE 1: Filtre Ràpid amb A* (A estrella) ---
+        # Descartem ràpidament els puzzles que no tenen solució o són evidents
+        min_moves_astar = _quick_astar(puzzle, max_states=15_000)
+        if min_moves_astar is None or min_moves_astar < 13:
+            continue
+
+        # --- FASE 2: Avaluació Profunda (BFS complet) ---
+        # Només s'executa si el filtre de l'A* indica que el puzle promet
         metrics = _full_bfs(puzzle, max_states=100_000)
 
         if not metrics["reachable"]:
             continue
         if metrics["min_moves"] is None or metrics["min_moves"] < 5:
-            continue  # massa fàcil
+            continue  # massa fàcil (comprovació de seguretat)
         if metrics["num_states"] < 20:
             continue  # massa petit
 
         stars, source = _stars(metrics)
+        print(stars)
         if stars < min_stars:
             continue
 
@@ -604,7 +680,8 @@ def generate_batch(strategy: str = "classic",
         arts_str   = str(metrics["articulation_points"])
         states_str = str(metrics["num_states"]) + ("+" if metrics["truncated"] else "")
 
-        print(f"{idx:>4}  {attempts:>6}  {moves_str:>5}  {arts_str:>5}  {states_str:>8}  {stars:>5.2f}  {name}")
+        if verbose:
+            print(f"{idx:>4}  {attempts:>6}  {moves_str:>5}  {arts_str:>5}  {states_str:>8}  {stars:>5.2f}  {name}")
 
     if len(generated) < count:
         print(f"\n⚠ Només s'han generat {len(generated)}/{count} puzzles en {attempts} intents.")

@@ -9,8 +9,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import math
-import graph_tool.all as gt  # type: ignore
-from graph_tool.topology import shortest_distance, label_biconnected_components  # type: ignore
 from puzzle import Puzzle
 import os
 import pandas as pd 
@@ -40,67 +38,6 @@ def predict_score_ml(metrics: dict[str, Any]) -> float | None:
         print(f"Error en la predicció: {e}")
         return None
 
-def calculate_metrics(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
-    """Calcula les mètriques del graf.
-    - Moviments mínims per arribar a la millor solució
-    - Número total d'estats
-    - Diàmetre del graf
-    - Punts d'articulació de la solució òptima
-    - Average branching factor del graf
-    """
-
-    vp_is_start = g.vp["is_start"]
-    vp_is_goal  = g.vp["is_goal"]
-
-    start_vertex = next(v for v in g.vertices() if vp_is_start[v])
-    goal_vertices = [v for v in g.vertices() if vp_is_goal[v]]
-
-    dist_from_start = shortest_distance(g, start_vertex)
-
-    #------------------------------------------
-    min_moves = min(int(dist_from_start[v]) for v in goal_vertices)    
-    
-    #------------------------------------------
-    num_states = g.num_vertices()
-
-
-    #------------------------------------------
-    # Busquem el goal que tingui la distància mínima
-    best_goal = min(goal_vertices, key=lambda v: dist_from_start[v]) #type: ignore
-    min_total_dist = int(dist_from_start[best_goal])
-
-    dist_from_best_goal = shortest_distance(g, best_goal) #VertexPropertyMap
-
-    edge_is_optimal = g.new_edge_property("bool") #EdgePropertyMap
-    for e in g.edges():
-        u, v = e.source(), e.target()
-        dist_start_u, dist_start_v = dist_from_start[u], dist_from_start[v]
-        dist_goal_u, dist_goal_v = dist_from_best_goal[u], dist_from_best_goal[v]
-
-        # L'aresta és part del camí crític cap al millor goal
-        if (dist_start_u + 1 + dist_goal_v == min_total_dist) or (dist_start_v + 1 + dist_goal_u == min_total_dist):
-            edge_is_optimal[e] = True
-    
-    # Creem una vista del graf que només contingui els camins òptims
-    g_optimal = gt.GraphView(g, efilt=edge_is_optimal)
-
-    # Els punts d'articulació són "passos obligats" per mantenir l'optimitat
-    _, art, _ = label_biconnected_components(g_optimal)  # type: ignore
-    num_articulation_points = int(sum(art.a))
-
-    #------------------------------------------
-    # Això mesura la llibertat de moviment total del puzzle
-    branching_factor = [v.out_degree() for v in g.vertices()]
-    total_degrees = sum(branching_factor)
-    avg_branching_factor = total_degrees / num_states
-
-    return {
-        "size": puzzle.W * puzzle.H,
-        "min_moves": min_moves,
-        "num_states": num_states,
-        "articulation_points_optimal": num_articulation_points,
-        "avg_branching_factor": avg_branching_factor,
-    }
 
 
 def ramp_up(x:float, good:float=0.5, cap:float=1.0):
@@ -158,54 +95,7 @@ def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
 
 
 
-
 CSV_PATH = 'puzzles_metrics.csv'
-
-def save_metrics_to_csv(puzzle_id: str, metrics: dict[str, Any], score: float) -> None:
-    """
-    Guarda o actualitza les mètriques d'un puzzle al fitxer CSV, mantenint les notes manuals.
-    """
-    # Estructura de la nova fila
-    new_data: dict[str, Any] = {
-        'id': puzzle_id,
-        'size': metrics["size"],
-        'min_moves': metrics['min_moves'],
-        'total_states': metrics['num_states'],
-        'articulation_points': metrics['articulation_points_optimal'],
-        'avg_branching': metrics['avg_branching_factor'],
-        'score': score,
-        'manual_score': None  # Es mantindrà si ja existia
-    }
-
-    df: pd.DataFrame
-    if os.path.exists(CSV_PATH):
-        df = pd.read_csv(CSV_PATH)
-        
-        # Comprovar si el puzzle ja és al CSV per no duplicar i mantenir la nota manual
-        if puzzle_id in df['id'].values:
-            idx = df[df['id'] == puzzle_id].index[0]
-            
-            # Preservem la manual_score actual si no és nul·la
-            current_manual = df.at[idx, 'manual_score']
-            new_data['manual_score'] = current_manual
-            
-            # Actualitzem els valors de la fila existent
-            for key, value in new_data.items():
-                df.at[idx, key] = value
-        else:
-            # Si el puzzle és nou, l'afegim com a nova fila
-            df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-    else:
-        # Si el fitxer no existeix, el creem de zero amb la primera fila
-        df = pd.DataFrame([new_data])
-
-    # Guardem el fitxer (sobrescrivint l'anterior amb les dades actualitzades)
-    df.to_csv(CSV_PATH, index=False)
-    print(f"Mètriques de '{puzzle_id}' actualitzades al CSV.")
-    
-
-
-
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Ús: python src/eval.py <puzzle.json> <graphs/puzzle.graphml>")
@@ -222,23 +112,28 @@ if __name__ == "__main__":
         print(f"No s'ha trobat el graf: {graphml_path}")
         sys.exit(1)
 
-    g = gt.load_graph(str(graphml_path))
     puzzle = Puzzle.from_json(puzzle_path.read_text())
-
-
     puzzle_id = puzzle_path.stem.split("_")[-1]
-    metrics = calculate_metrics(g, puzzle)
+    
+    df = pd.read_csv(CSV_PATH)
+    row = df[df['id']==puzzle_id].iloc[0]
+    
+    metrics = {
+        'size': row['size'],
+        'min_moves': row['min_moves'],
+        'num_states': row['total_states'],
+        'articulation_points_optimal': row['articulation_points'],
+        'avg_branching_factor': row['avg_branching']
+    }
+    
+    # Calculem la nota
     ml_score = predict_score_ml(metrics)
-
-    if ml_score is not None:
-        score = ml_score
-        print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
-    else:
-        score = calculate_stars_2(metrics, puzzle) # Teva fórmula actual per defecte
-        print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
-
-    save_metrics_to_csv(puzzle_id, metrics, score)
-
+    score = ml_score if ml_score is not None else calculate_stars_2(metrics, puzzle)
+    
+    # Actualitzem només la nota al CSV
+    df.loc[df['id'] == puzzle_id, 'score'] = score
+    df.to_csv(CSV_PATH, index=False)
+    
 
     print(f"\n--- Resultat per a {puzzle_path.name} ---")
     print(f"\n  ⭐ Valoració: {score} / 5.0")

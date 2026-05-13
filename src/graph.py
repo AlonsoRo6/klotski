@@ -14,9 +14,83 @@ import graph_tool.all as gt #type:ignore
 from puzzle import Puzzle, State
 from logic import possible_moves, apply_move, is_goal
 from typing import cast
+import pandas as pd
+import os
+from graph_tool.topology import shortest_distance, label_biconnected_components # type: ignore
 
 # StateKey és una tupla de posicions que identifica un estat
 StateKey = tuple[tuple[int, int], ...]
+
+CSV_PATH = 'puzzles_metrics.csv'
+
+def calculate_metrics_in_graph(g: gt.Graph, puzzle: Puzzle) -> dict: # type: ignore
+    """Càlcul de mètriques idèntic al de eval.py"""
+    vp_is_start = g.vp["is_start"]
+    vp_is_goal  = g.vp["is_goal"]
+
+    start_vertex = next(v for v in g.vertices() if vp_is_start[v])
+    goal_vertices = [v for v in g.vertices() if vp_is_goal[v]]
+
+    if not goal_vertices:
+        return {}
+
+    dist_from_start = shortest_distance(g, start_vertex)
+    min_moves = min(int(dist_from_start[v]) for v in goal_vertices)    
+    num_states = g.num_vertices()
+
+    best_goal = min(goal_vertices, key=lambda v: dist_from_start[v]) # type: ignore
+    min_total_dist = int(dist_from_start[best_goal])
+    dist_from_best_goal = shortest_distance(g, best_goal)
+
+    edge_is_optimal = g.new_edge_property("bool")
+    for e in g.edges():
+        u, v = e.source(), e.target()
+        if (dist_from_start[u] + 1 + dist_from_best_goal[v] == min_total_dist) or (dist_from_start[v] + 1 + dist_from_best_goal[u] == min_total_dist):
+            edge_is_optimal[e] = True
+    
+    g_optimal = gt.GraphView(g, efilt=edge_is_optimal)
+    _, art, _ = label_biconnected_components(g_optimal)
+    num_articulation_points = int(sum(art.a))
+
+    avg_branching_factor = sum(v.out_degree() for v in g.vertices()) / num_states
+
+    return {
+        "size": puzzle.W * puzzle.H,
+        "min_moves": min_moves,
+        "num_states": num_states,
+        "articulation_points": num_articulation_points,
+        "avg_branching": avg_branching_factor,
+    }
+
+def save_to_csv_simple(puzzle_id: str, metrics: dict): # type: ignore
+    """Guarda les mètriques al CSV sense la nota (que es posarà a eval.py)"""
+    if not metrics: return
+    
+    new_data = {
+        'id': puzzle_id,
+        'size': metrics["size"],
+        'min_moves': metrics['min_moves'],
+        'total_states': metrics['num_states'],
+        'articulation_points': metrics['articulation_points'],
+        'avg_branching': metrics['avg_branching'],
+        'score': None, # Es calcularà a eval.py
+        'manual_score': None
+    }
+
+    if os.path.exists(CSV_PATH):
+        df = pd.read_csv(CSV_PATH)
+        if puzzle_id in df['id'].values:
+            idx = df[df['id'] == puzzle_id].index[0]
+            for key, value in new_data.items():
+                if key != 'manual_score' and key != 'score': # Preservem notes existents
+                    df.at[idx, key] = value
+        else:
+            df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+    else:
+        df = pd.DataFrame([new_data])
+
+    df.to_csv(CSV_PATH, index=False)
+    print(f"Mètriques guardades al CSV per a {puzzle_id}")
 
 
 def state_key(puzzle: Puzzle, state_str: str | State) -> StateKey:
@@ -100,7 +174,12 @@ def build_graph(puzzle: Puzzle) -> gt.Graph:
 
     stack = [puzzle.start]
     get_or_create(puzzle.start)
+    i = 1
     while stack:
+        if i%100000 == 0:
+            print(f'{i}, queue:{len(stack)}')
+        i += 1
+
         state = stack.pop()
         v_cur = get_or_create(state) 
 
@@ -134,6 +213,10 @@ if __name__ == "__main__":
 
     print('Executant graph.py')
     g = build_graph(puzzle)
+
+    puzzle_id = json_path.stem.split("_")[-1]
+    metrics = calculate_metrics_in_graph(g, puzzle)
+    save_to_csv_simple(puzzle_id, metrics)
 
     n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])
     print(f"Nodes (estats): {g.num_vertices()}")

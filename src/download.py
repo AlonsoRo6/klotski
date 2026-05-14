@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 URL = "https://klotski.pauek.dev/api/puzzles"
-OUT_DIR = Path("puzzles")
+OUT_DIR = Path("puzzles/repository")
 
 def download_puzzle(i: int | None, puzzle_id: str) -> None:
     '''

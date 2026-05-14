@@ -15,7 +15,8 @@ from pathlib import Path
 import pandas as pd  # Importat per llegir el CSV centralitzat
 
 BASE_URL = "https://klotski.pauek.dev"
-CSV_PATH = Path("puzzles_metrics.csv")
+import os
+CSV_PATH = Path(os.environ.get("KLOTSKI_CSV_PATH", "puzzles_metrics.csv"))
 
 
 def puzzle_id_from_path(puzzle_path: Path) -> str:
@@ -23,15 +24,15 @@ def puzzle_id_from_path(puzzle_path: Path) -> str:
     return puzzle_path.stem.split("_")[-1]
 
 
-def load_stars_from_csv(puzzle_id: str) -> float:
+def load_stars_from_csv(puzzle_id: str, csv_path: Path) -> float:
     """Cerca la puntuació del puzzle al fitxer CSV centralitzat."""
-    if not CSV_PATH.exists():
-        print(f"Error: no s'ha trobat el fitxer '{CSV_PATH}'.")
+    if not csv_path.exists():
+        print(f"Error: no s'ha trobat el fitxer '{csv_path}'.")
         print("Executa primer 'eval.py' per generar les mètriques al CSV.")
         sys.exit(1)
 
     try:
-        df = pd.read_csv(CSV_PATH)
+        df = pd.read_csv(csv_path)
         # Busquem la fila que coincideixi amb l'ID
         row = df[df['id'] == puzzle_id]
 
@@ -73,14 +74,16 @@ def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Ús: python rate.py <puzzle_<id>.json>")
+        print("Ús: python rate.py <puzzle_<id>.json> [<csv_path>]")
         sys.exit(1)
 
     puzzle_path = Path(sys.argv[1])
+    if len(sys.argv) > 2:
+        CSV_PATH = Path(sys.argv[2])
     token = '019d90b1-6a3c-7000-ad15-514895909854'    
     puzzle_id = puzzle_id_from_path(puzzle_path)
     
-    stars = load_stars_from_csv(puzzle_id)
+    stars = load_stars_from_csv(puzzle_id, CSV_PATH)
 
     if post_vote(puzzle_id, stars, token):
         print(f"Valoració {stars:.2f} extreta del CSV i enviada per a '{puzzle_path.name}'.")

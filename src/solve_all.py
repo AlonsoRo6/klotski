@@ -18,14 +18,26 @@ def run(cmd: list[str]) -> None:
         return 
 
 
+import argparse
+import os
+
 def main() -> None:
-    puzzles_dir = Path("puzzles")
+    parser = argparse.ArgumentParser(description="Resol tots els puzzles i genera grafs i gifs.")
+    parser.add_argument("--puzzles-dir", type=str, default="puzzles", help="Carpeta base dels puzzles")
+    parser.add_argument("--csv-path", type=str, default="puzzles_metrics.csv", help="Fitxer CSV per guardar mètriques")
+    args = parser.parse_args()
+
+    puzzles_dir = Path(args.puzzles_dir)
+    csv_path = Path(args.csv_path)
+    
+    os.environ["KLOTSKI_CSV_PATH"] = str(csv_path)
+
     graphs_dir = Path("graphs")
     solutions_dir = Path("solutions")
     gifs_dir = Path("solutions_gifs")
 
 
-    puzzle_files = list(puzzles_dir.glob("*.json"))
+    puzzle_files = list(puzzles_dir.rglob("*.json"))
 
     if not puzzle_files:
         print(f"No s'han trobat fitxers .json a {puzzles_dir}")
@@ -40,14 +52,22 @@ def main() -> None:
         print(f"PROCESSANT: {name}")
         print(f"{'='*40}")
 
-        graphml_path = graphs_dir / f"{name}.graphml"
-        solution_path = solutions_dir / f"{name}.sol.json"
-        gif_path = gifs_dir / f"{name}.gif"
+        # Mantenim la carpeta custom o repository a les carpetes de sortida
+        rel_path = puzzle_path.parent.relative_to(puzzles_dir)
+        
+        graphml_path = graphs_dir / rel_path / f"{name}.graphml"
+        solution_path = solutions_dir / rel_path / f"{name}.sol.json"
+        gif_path = gifs_dir / rel_path / f"{name}.gif"
+        
+        # Ens assegurem que existeixen les carpetes
+        graphml_path.parent.mkdir(parents=True, exist_ok=True)
+        solution_path.parent.mkdir(parents=True, exist_ok=True)
+        gif_path.parent.mkdir(parents=True, exist_ok=True)
 
         #Generar Graf
         if not graphml_path.exists():
             print(f'-> Generant graf per a {name}...')
-            run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path)])
+            run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), str(csv_path)])
         else:
             print(f"-> El graf ja existeix: {graphml_path}")
 

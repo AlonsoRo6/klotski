@@ -1,7 +1,6 @@
 """
 Generador de puzzles de Klotski canònics.
 
-Implementa tres estratègies de generació:
   - 'classic'  : taulell 4x5 amb peça 2x2 principal (Klotski clàssic)
   - 'freeform' : taulell i peces aleatòries dins uns paràmetres
   - 'walls'    : taulell amb parets que creen laberints
@@ -24,23 +23,17 @@ from __future__ import annotations
 import argparse
 import heapq
 import itertools
-import json
 import math
 import random
 import sys
 from pathlib import Path
 from typing import Optional
 
-# ─── Imports del projecte ───────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
 from puzzle import Coord, Piece, Puzzle, State
-from logic  import valid_placement, possible_moves, apply_move, is_goal
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  HELPERS
-# ════════════════════════════════════════════════════════════════════════════
+from logic import valid_placement, possible_moves, apply_move, is_goal
+from eval import predict_score_ml, calculate_stars_2
 
 def _cells(piece: Piece, pos: Coord) -> set[Coord]:
     px, py = pos
@@ -54,13 +47,16 @@ def _all_occupied(puzzle: Puzzle, state: State) -> set[Coord]:
     return occ
 
 
-def _build_puzzle(W: int, H: int,
-                  walls: list[Coord],
-                  pieces_and_positions: list[tuple[Piece, Coord]],
-                  goal_piece_idx: int,
-                  goal_pos: Coord) -> Optional[Puzzle]:
+def _build_puzzle(
+    W: int,
+    H: int,
+    walls: list[Coord],
+    pieces_and_positions: list[tuple[Piece, Coord]],
+    goal_piece_idx: int,
+    goal_pos: Coord,
+) -> Optional[Puzzle]:
     """
-    Construeix un Puzzle canònic a partir de les dades en brut.
+    Construeix un Puzzle canònic a partir de les dades.
     Retorna None si la construcció falla per qualsevol motiu.
     """
     try:
@@ -68,23 +64,17 @@ def _build_puzzle(W: int, H: int,
         # Ordenació canònica: (forma, posició_inicial)
         sorted_pp = sorted(pieces_and_positions, key=lambda pp: (pp[0], pp[1]))
         # El goal_piece_idx és sobre la llista original; cal trobar on ha anat
-        orig_piece  = pieces_and_positions[goal_piece_idx][0]
-        orig_pos    = pieces_and_positions[goal_piece_idx][1]
-        new_idx = next(
-            i for i, (p, pos) in enumerate(sorted_pp)
-            if p == orig_piece and pos == orig_pos
-        )
+        orig_piece = pieces_and_positions[goal_piece_idx][0]
+        orig_pos = pieces_and_positions[goal_piece_idx][1]
+        new_idx = next(i for i, (p, pos) in enumerate(sorted_pp) if p == orig_piece and pos == orig_pos)
         pieces = tuple(p for p, _ in sorted_pp)
-        start  = State(tuple(pos for _, pos in sorted_pp))
-        goals  = ((new_idx, goal_pos),)
-        return Puzzle(W=W, H=H, walls=walls_t, pieces=pieces, start=start, goals=goals)
+        start = State(tuple(pos for _, pos in sorted_pp))
+        goals = ((new_idx, goal_pos),)
+        return Puzzle(W, H, walls_t, pieces, start, goals)
     except Exception:
         return None
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  FILTRE RÀPID AMB A* (A estrella)
-# ════════════════════════════════════════════════════════════════════════════
 
 def _heuristic(puzzle: Puzzle, state: State) -> int:
     """
@@ -100,278 +90,107 @@ def _heuristic(puzzle: Puzzle, state: State) -> int:
 
 def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
     """
-    Cerca informada amb A* per trobar el nombre mínim de moviments ràpidament.
+    A* per trobar el nombre mínim de moviments ràpidament.
     Retorna el nombre de moviments de la solució òptima, o None si no en té
     (o si supera el límit d'estats explorats).
     """
-    print('a')
+    print("Fent A* per trobar el nombre mínim de moviments ràpidament...")
     start_pos = puzzle.start.positions
-    
+
     # Cua de prioritats: (f, g, counter, state_positions)
     # El counter desempatarà quan la f i la g siguin iguals
-    counter = itertools.count()
-    
+    counter = 0
+
     h_start = _heuristic(puzzle, puzzle.start)
-    queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, next(counter), start_pos)]
+    queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, counter, start_pos)]
+    counter += 1
     
-    # Registre del menor cost (g) trobat fins ara per a cada estat
+    # Millor cost (g) trobat fins ara per a cada estat
     best_g: dict[tuple, int] = {start_pos: 0}
-    
+
     num_states = 0
-    
+
     while queue and num_states < max_states:
         f, g, _, pos_tuple = heapq.heappop(queue)
         state = State(pos_tuple)
-        
+
         # Si ja havíem trobat un camí millor prèviament cap a aquest estat, l'ignorem
-        if g > best_g.get(pos_tuple, float('inf')):
+        if g > best_g.get(pos_tuple, float("inf")):
             continue
-            
+
         if is_goal(puzzle, state):
             return g
-            
+
         num_states += 1
-        
+
         for move in possible_moves(puzzle, state):
             nstate = apply_move(puzzle, state, move)
             nb = nstate.positions
             new_g = g + 1
-            
-            # Només afegim a la cua si hem trobat un camí estrictament millor
-            if new_g < best_g.get(nb, float('inf')):
+
+            # Només afegim a la cua si hem trobat un camí millor
+            if new_g < best_g.get(nb, float("inf")):
                 best_g[nb] = new_g
                 h = _heuristic(puzzle, nstate)
-                heapq.heappush(queue, (new_g + h, new_g, next(counter), nb))
-                
+                heapq.heappush(queue, (new_g + h, new_g, counter, nb))
+                counter += 1
+
     return None
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  BFS COMPLET per avaluació (sense graph-tool)
-# ════════════════════════════════════════════════════════════════════════════
 
-def _full_bfs(puzzle: Puzzle, max_states: int = 750_000) -> dict:
+def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> dict | None:
     """
-    BFS complet des de l'estat inicial.
+    Exploració completa des de l'estat inicial limitat a `max_states`.
 
-    A més de les mètriques bàsiques, estima els 'articulation_points' del
-    camí òptim sense necessitar graph-tool:
-
-      - Construeix el graf d'estats complet (adjacència bidireccional).
-      - Troba el camí òptim (profunditat mínima fins al goal).
-      - Compta els nodes del camí òptim on el grau dins del subgraf òptim
-        és exactament 2 (un predecessor + un successor), és a dir, nodes
-        per on TOTES les solucions òptimes han de passar forçosament.
-        Aquests equivalen als punts d'articulació del subgraf òptim.
-
-    Retorna:
-        min_moves, num_states, avg_branching_factor,
-        articulation_points (estimació), reachable, truncated
+    Utilitza `build_graph` i `calculate_metrics_in_graph` de `graph.py`
+    si graph-tool està disponible, assegurant que la normalització d'estats
+    és idèntica a l'oficial per unificar els estats amb peces repetides.
     """
-    from collections import deque
-    
-    print('b')
-    start = puzzle.start.positions
-
-    # dist[estat] = profunditat mínima des de l'inici
-    dist: dict[tuple, int] = {start: 0}
-    # adjacència: estat -> conjunt de veïns (bidireccional, tots els estats)
-    adj: dict[tuple, set[tuple]] = {start: set()}
-
-    queue: deque[tuple] = deque([start])
-    min_moves = None
-    best_goal_state: tuple | None = None
-    total_out = 0
-    num_states = 0
-
-    while queue and num_states < max_states:
-        pos_tuple = queue.popleft()
-        state     = State(pos_tuple)
-        depth     = dist[pos_tuple]
-        num_states += 1
-
-        if is_goal(puzzle, state):
-            if min_moves is None or depth < min_moves:
-                min_moves = depth
-                best_goal_state = pos_tuple
-
-        moves = possible_moves(puzzle, state)
-        total_out += len(moves)
-        for move in moves:
-            nstate = apply_move(puzzle, state, move)
-            nb = nstate.positions
-            # Afegim l'aresta en ambdues direccions
-            adj[pos_tuple].add(nb)
-            if nb not in dist:
-                dist[nb] = depth + 1
-                adj[nb] = {pos_tuple}
-                queue.append(nb)
-            else:
-                adj.setdefault(nb, set()).add(pos_tuple)
-
-    avg_bf    = total_out / max(num_states, 1)
-    reachable = min_moves is not None
-    truncated = num_states >= max_states
-
-    # ── Estimació dels punts d'articulació del subgraf òptim ────────────────
-    articulation_points = 0
-    if reachable and best_goal_state is not None:
-        min_d = min_moves  # type: ignore[assignment]
-        goal_dist: dict[tuple, int] = {}
-
-        # BFS invers des del millor goal per obtenir dist_goal[estat]
-        gqueue: deque[tuple] = deque([best_goal_state])
-        goal_dist[best_goal_state] = 0
-        while gqueue:
-            cur = gqueue.popleft()
-            for nb in adj.get(cur, set()):
-                if nb not in goal_dist:
-                    goal_dist[nb] = goal_dist[cur] + 1
-                    gqueue.append(nb)
-
-        # Subgraf òptim: arestes (u,v) on dist[u]+1+goal_dist[v] == min_d
-        # (o dist[v]+1+goal_dist[u] == min_d, ja que el graf és no dirigit)
-        opt_adj: dict[tuple, set[tuple]] = {}
-        for u, neighbours in adj.items():
-            du = dist.get(u)
-            if du is None or du > min_d:
-                continue
-            for v in neighbours:
-                dv = dist.get(v)
-                gv = goal_dist.get(v)
-                gu = goal_dist.get(u)
-                if dv is not None and gv is not None and gu is not None:
-                    if du + 1 + gv == min_d or dv + 1 + gu == min_d:
-                        opt_adj.setdefault(u, set()).add(v)
-                        opt_adj.setdefault(v, set()).add(u)
-
-        # Punt d'articulació del subgraf òptim: node (ni start ni goal) amb
-        # grau == 2 dins del subgraf òptim on el predecessor i successor
-        # estan a profunditats dist-1 i dist+1 respectivament.
-        # Equivalentment: un sol camí passa per ell → és un coll d'ampolla.
-        for node, neighbours in opt_adj.items():
-            if node == start or node == best_goal_state:
-                continue
-            d = dist.get(node, -1)
-            preds = [n for n in neighbours if dist.get(n, -1) == d - 1]
-            succs = [n for n in neighbours if dist.get(n, -1) == d + 1]
-            # Si té exactament 1 predecessor i 1 successor en el subgraf
-            # òptim, és un punt d'articulació (coll d'ampolla obligatori)
-            if len(preds) == 1 and len(succs) == 1:
-                articulation_points += 1
-
-    return {
-        "size":                    puzzle.W * puzzle.H,
-        "min_moves":               min_moves,
-        "num_states":              num_states,
-        "avg_branching_factor":    avg_bf,
-        "articulation_points":     articulation_points,
-        "reachable":               reachable,
-        "truncated":               truncated,
-    }
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  PREDICCIÓ D'ESTRELLES AMB EL MODEL ENTRENAT
-# ════════════════════════════════════════════════════════════════════════════
-
-def _load_model(model_path: Path = Path("model_difficulty.pkl")):
-    """Carrega el model de ML. Retorna None si no existeix."""
-    if not model_path.exists():
-        # Buscar també un nivell amunt (si s'executa des de src/)
-        alt = model_path.parent.parent / model_path.name
-        if alt.exists():
-            model_path = alt
-        else:
-            return None
     try:
-        import joblib  # type: ignore
-        return joblib.load(model_path)
-    except Exception:
+        from graph import build_graph, calculate_metrics_in_graph
+
+        print("Calculant graf complet amb graph-tool (DFS)...")
+        g = build_graph(puzzle, max_states)
+        metrics = calculate_metrics_in_graph(g, puzzle)
+
+        truncated = g.num_vertices() >= max_states
+
+        if not metrics:
+            return {
+                "size": puzzle.W * puzzle.H,
+                "min_moves": None,
+                "num_states": g.num_vertices(),
+                "avg_branching": 0,
+                "articulation_points": 0,
+                "reachable": False,
+                "truncated": truncated,
+            }
+
+        metrics["reachable"] = True
+        metrics["truncated"] = truncated
+        return metrics
+    except ImportError:
+        print("No s'ha pogut generar el graf complet. No s'han pogut calcular les mètriques.")
         return None
 
 
-_MODEL_CACHE = None  # singleton per no recarregar en cada crida
-
-
-def _predict_stars(metrics: dict) -> float | None:
-    """
-    Intenta predir les estrelles amb el model de ML.
-    Retorna None si el model no està disponible.
-    Les features han de coincidir exactament amb les de train_model.py:
-        size, min_moves, total_states, articulation_points, avg_branching
-    """
-    global _MODEL_CACHE
-    if _MODEL_CACHE is None:
-        _MODEL_CACHE = _load_model()
-    if _MODEL_CACHE is None:
-        return None
-
-    try:
-        import pandas as pd  # type: ignore
-        features = pd.DataFrame([{
-            "size":                 metrics["size"],
-            "min_moves":            metrics["min_moves"],
-            "total_states":         metrics["num_states"],
-            "articulation_points":  metrics["articulation_points"],
-            "avg_branching":        metrics["avg_branching_factor"],
-        }])
-        pred = _MODEL_CACHE.predict(features)[0]
-        return round(float(pred), 2)
-    except Exception:
-        return None
-
-
-def _fallback_stars(metrics: dict) -> float:
-    """
-    Fórmula heurística (la mateixa base que calculate_stars_2 d'eval.py)
-    com a pla B quan el model no és disponible.
-    """
-    if not metrics["reachable"] or metrics["min_moves"] is None:
-        return 0.0
-
-    size     = metrics["size"]
-    log_max  = sum(math.log(i) for i in range(1, size + 1))
-
-    s_diff   = min(metrics["min_moves"] / size, 1.0)
-    s_scale  = min(math.log(max(metrics["num_states"], 1)) / log_max, 1.0)
-
-    def ramp_up(x: float, cap: float = 1.0) -> float:
-        return min(x / cap, 1.0) if x > 0 else 0.0
-
-    score = 0.5 * ramp_up(s_diff, 0.8) + 0.5 * ramp_up(s_scale, 0.35)
-    return round(1 + score * 4, 2)
-
-
-def _stars(metrics: dict) -> tuple[float, str]:
-    """
-    Retorna (estrelles, font) on font és 'ML' o 'heurística'.
-    """
-    pred = _predict_stars(metrics)
-    if pred is not None:
-        return pred, "ML"
-    return _fallback_stars(metrics), "heurística"
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  FORMES DE PECES
-# ════════════════════════════════════════════════════════════════════════════
 
 # Formes predefinides (forma canònica, coordenades relatives ordenades)
 SHAPES: dict[str, Piece] = {
-    "1x1":  Piece((0,0)),
-    "1x2":  Piece((0,0),(0,1)),
-    "2x1":  Piece((0,0),(1,0)),
-    "1x3":  Piece((0,0),(0,1),(0,2)),
-    "3x1":  Piece((0,0),(1,0),(2,0)),
-    "2x2":  Piece((0,0),(0,1),(1,0),(1,1)),
-    "L":    Piece((0,0),(0,1),(1,1)),
-    "Lrev": Piece((0,1),(1,0),(1,1)),
-    "J":    Piece((0,0),(1,0),(1,1)),
-    "Jrev": Piece((0,0),(0,1),(1,0)),
-    "S":    Piece((0,1),(1,0),(1,1)),
-    "Z":    Piece((0,0),(0,1),(1,1)),
-    "T":    Piece((0,0),(1,0),(1,1),(2,0)),
+    "1x1": Piece((0, 0)),
+    "1x2": Piece((0, 0), (0, 1)),
+    "2x1": Piece((0, 0), (1, 0)),
+    "1x3": Piece((0, 0), (0, 1), (0, 2)),
+    "3x1": Piece((0, 0), (1, 0), (2, 0)),
+    "2x2": Piece((0, 0), (0, 1), (1, 0), (1, 1)),
+    "L": Piece((0, 0), (0, 1), (1, 1)),
+    "Lrev": Piece((0, 1), (1, 0), (1, 1)),
+    "J": Piece((0, 0), (1, 0), (1, 1)),
+    "Jrev": Piece((0, 0), (0, 1), (1, 0)),
+    "S": Piece((0, 1), (1, 0), (1, 1)),
+    "Z": Piece((0, 0), (0, 1), (1, 1)),
+    "T": Piece((0, 0), (1, 0), (1, 1), (2, 0)),
 }
 
 CLASSIC_PIECES = ["1x1", "1x2", "2x1", "2x2"]
@@ -386,11 +205,15 @@ def _random_piece(rng: random.Random, choices: list[str]) -> Piece:
 #  PLACEMENT: col·loca peces al taulell sense solapament
 # ════════════════════════════════════════════════════════════════════════════
 
-def _place_pieces(rng: random.Random,
-                  W: int, H: int,
-                  walls: list[Coord],
-                  pieces: list[Piece],
-                  max_tries: int = 2000) -> Optional[list[Coord]]:
+
+def _place_pieces(
+    rng: random.Random,
+    W: int,
+    H: int,
+    walls: list[Coord],
+    pieces: list[Piece],
+    max_tries: int = 2000,
+) -> Optional[list[Coord]]:
     """
     Intenta col·locar totes les peces sense solapar-se ni solapar les parets.
     Retorna la llista de posicions o None si falla.
@@ -407,11 +230,16 @@ def _place_pieces(rng: random.Random,
                 return False
         return True
 
+    # Ordenem les peces de més grans a més petites per facilitar el bin packing
+    ordered_pieces = sorted(
+        enumerate(pieces), key=lambda p: len(p[1].coords), reverse=True
+    )
+
     for _ in range(max_tries):
         occupied: set[Coord] = set(walls)
-        positions: list[Coord] = []
+        temp_positions: dict[int, Coord] = {}
         ok = True
-        for piece in pieces:
+        for orig_idx, piece in ordered_pieces:
             # Posicions vàlides per a aquesta peça
             valid: list[Coord] = [
                 (x, y)
@@ -424,9 +252,9 @@ def _place_pieces(rng: random.Random,
                 break
             pos = rng.choice(valid)
             occupied |= _cells(piece, pos)
-            positions.append(pos)
+            temp_positions[orig_idx] = pos
         if ok:
-            return positions
+            return [temp_positions[i] for i in range(len(pieces))]
     return None
 
 
@@ -435,21 +263,21 @@ def _place_pieces(rng: random.Random,
 #  Taulell 4x5, peça 2x2 principal, peces clàssiques de Klotski.
 # ════════════════════════════════════════════════════════════════════════════
 
+
 def _goal_positions_for(piece: Piece, W: int, H: int) -> list[Coord]:
     """Retorna totes les posicions vàlides de l'objectiu per a una peça."""
     positions = []
     for x in range(W):
         for y in range(H):
             # La peça ha de cabre dins del taulell en la posició objectiu
-            if all(0 <= x+dx < W and 0 <= y+dy < H for dx, dy in piece.coords):
+            if all(0 <= x + dx < W and 0 <= y + dy < H for dx, dy in piece.coords):
                 positions.append((x, y))
     return positions
 
 
-def generate_classic(rng: random.Random,
-                     W: int = 4, H: int = 5,
-                     num_small: int = 4,
-                     num_medium: int = 3) -> Optional[Puzzle]:
+def generate_classic(
+    rng: random.Random, W: int = 4, H: int = 5, num_small: int = 4, num_medium: int = 3
+) -> Optional[Puzzle]:
     """
     Genera un puzzle estil Klotski clàssic:
     - Peça 2x2 és l'objectiu principal
@@ -459,10 +287,10 @@ def generate_classic(rng: random.Random,
     main_piece = SHAPES["2x2"]
 
     medium_shapes = [SHAPES["1x2"], SHAPES["2x1"]]
-    small_shape   = SHAPES["1x1"]
+    small_shape = SHAPES["1x1"]
 
     medium_pieces = [rng.choice(medium_shapes) for _ in range(num_medium)]
-    small_pieces  = [small_shape] * num_small
+    small_pieces = [small_shape] * num_small
 
     all_pieces = [main_piece] + medium_pieces + small_pieces
 
@@ -470,8 +298,19 @@ def generate_classic(rng: random.Random,
     if positions is None:
         return None
 
+    start_pos = positions[0]
+
     # Objectiu: 2x2 al centre baix (o a qualsevol posició del marge inferior)
-    goal_candidates = [(x, H - 2) for x in range(W - 1)]
+    goal_candidates = []
+    for x in range(W - 1):
+        gy = H - 2
+        # Assegurem que estigui una mica lluny
+        if abs(x - start_pos[0]) + abs(gy - start_pos[1]) >= 2:
+            goal_candidates.append((x, gy))
+
+    if not goal_candidates:
+        return None
+
     goal_pos = rng.choice(goal_candidates)
 
     # L'índex de la peça principal (0) canviarà amb l'ordenació canònica
@@ -481,30 +320,42 @@ def generate_classic(rng: random.Random,
 
 # ════════════════════════════════════════════════════════════════════════════
 #  ESTRATÈGIA 2: FREEFORM
-#  Taulell i peces aleatòries, objectiu aleatori.
 # ════════════════════════════════════════════════════════════════════════════
 
-def generate_freeform(rng: random.Random,
-                      W_range: tuple[int,int] = (4, 6),
-                      H_range: tuple[int,int] = (4, 6),
-                      num_pieces_range: tuple[int,int] = (4, 8),
-                      piece_pool: list[str] = CLASSIC_PIECES) -> Optional[Puzzle]:
+
+def generate_freeform(
+    rng: random.Random,
+    W_range: tuple[int, int] = (4, 6),
+    H_range: tuple[int, int] = (4, 6),
+    num_pieces_range: tuple[int, int] = (4, 8),
+    piece_pool: list[str] = FREEFORM_PIECES,
+) -> Optional[Puzzle]:
     """
     Genera un puzzle amb taulell i peces totalment aleatoris.
     """
     W = rng.randint(*W_range)
     H = rng.randint(*H_range)
-    num_pieces = rng.randint(*num_pieces_range)
+    num_pieces = max(2, rng.randint(*num_pieces_range))
 
-    # Generem les peces (bias cap a peces petites/mitjanes per no omplir el taulell)
-    weights = [3, 2, 2, 1]  # 1x1 és més probable
-    pool_w  = piece_pool[:len(weights)]
     pieces: list[Piece] = []
-    for _ in range(num_pieces):
-        name = rng.choices(pool_w, weights=weights[:len(pool_w)], k=1)[0]
+    
+    # 1. Garantir almenys una peça gran (L, J, 2x2, 3x1...)
+    grans = [p for p in piece_pool if len(SHAPES[p].coords) >= 3 or p == "2x2"]
+    if not grans: grans = piece_pool
+    pieces.append(SHAPES[rng.choice(grans)])
+    
+    # 2. Garantir almenys una peça petita però de mida 2 (1x2 o 2x1)
+    petites = [p for p in piece_pool if len(SHAPES[p].coords) == 2]
+    if not petites: petites = piece_pool
+    pieces.append(SHAPES[rng.choice(petites)])
+    
+    # 3. La resta de peces de manera aleatòria
+    for _ in range(num_pieces - 2):
+        # Donem una mica més de probabilitat a les peces petites per no saturar el taulell
+        weights = [1 if len(SHAPES[p].coords) >= 3 else 3 for p in piece_pool]
+        name = rng.choices(piece_pool, weights=weights, k=1)[0]
         pieces.append(SHAPES[name])
 
-    # Assegurem que hi ha almenys una peça que no sigui 1x1 com a objectiu
     big_pieces = [i for i, p in enumerate(pieces) if len(p.coords) > 1]
     if not big_pieces:
         pieces[0] = SHAPES["2x1"]
@@ -518,14 +369,21 @@ def generate_freeform(rng: random.Random,
     goal_idx = rng.choice(big_pieces)
     goal_piece = pieces[goal_idx]
 
+    start_pos = positions[goal_idx]
+
     # Posició objectiu: vora del taulell (dreta o baix), diferent de l'inicial
     edge_goals = []
     for x in range(W):
         for y in range(H):
-            if (x, y) != positions[goal_idx]:
-                if all(0 <= x+dx < W and 0 <= y+dy < H for dx, dy in goal_piece.coords):
-                    if x + max(dx for dx, _ in goal_piece.coords) == W - 1 \
-                    or y + max(dy for _, dy in goal_piece.coords) == H - 1:
+            dist = abs(x - start_pos[0]) + abs(y - start_pos[1])
+            if dist >= 2:  # Assegurem que estigui una mica lluny
+                if all(
+                    0 <= x + dx < W and 0 <= y + dy < H for dx, dy in goal_piece.coords
+                ):
+                    if (
+                        x + max(dx for dx, _ in goal_piece.coords) == W - 1
+                        or y + max(dy for _, dy in goal_piece.coords) == H - 1
+                    ):
                         edge_goals.append((x, y))
 
     if not edge_goals:
@@ -541,30 +399,47 @@ def generate_freeform(rng: random.Random,
 #  Taulell amb parets que comporten laberints interiors.
 # ════════════════════════════════════════════════════════════════════════════
 
-def _gen_walls(rng: random.Random, W: int, H: int,
-               num_walls: int) -> list[Coord]:
+
+def _gen_walls(rng: random.Random, W: int, H: int, num_walls: int) -> list[Coord]:
     """Genera parets aleatòries (caselles buides bloquejades)."""
     all_cells = [(x, y) for x in range(W) for y in range(H)]
     rng.shuffle(all_cells)
     return all_cells[:num_walls]
 
 
-def generate_walls(rng: random.Random,
-                   W: int = 5, H: int = 5,
-                   num_walls_range: tuple[int,int] = (2, 6),
-                   num_pieces_range: tuple[int,int] = (3, 6)) -> Optional[Puzzle]:
+def generate_walls(
+    rng: random.Random,
+    W: int = 5,
+    H: int = 5,
+    num_walls_range: tuple[int, int] = (2, 6),
+    num_pieces_range: tuple[int, int] = (3, 6),
+    piece_pool: list[str] = FREEFORM_PIECES,
+) -> Optional[Puzzle]:
     """
     Genera un puzzle amb parets que creen laberints interiors.
     Les peces han de navegar al voltant de les parets.
     """
-    num_walls  = rng.randint(*num_walls_range)
-    num_pieces = rng.randint(*num_pieces_range)
+    num_walls = rng.randint(*num_walls_range)
+    num_pieces = max(2, rng.randint(*num_pieces_range))
     walls = _gen_walls(rng, W, H, num_walls)
 
     pieces: list[Piece] = []
-    for _ in range(num_pieces):
-        # En taulells amb parets, peces petites/mitjanes funcionen millor
-        name = rng.choice(["1x1", "1x1", "2x1", "1x2", "2x2"])
+    
+    # 1. Garantir almenys una peça gran (L, J, 2x2, 3x1...)
+    grans = [p for p in piece_pool if len(SHAPES[p].coords) >= 3 or p == "2x2"]
+    if not grans: grans = piece_pool
+    pieces.append(SHAPES[rng.choice(grans)])
+    
+    # 2. Garantir almenys una peça petita però de mida 2 (1x2 o 2x1)
+    petites = [p for p in piece_pool if len(SHAPES[p].coords) == 2]
+    if not petites: petites = piece_pool
+    pieces.append(SHAPES[rng.choice(petites)])
+    
+    # 3. La resta de peces de manera aleatòria
+    for _ in range(num_pieces - 2):
+        # Donem una mica més de probabilitat a les peces petites perquè en parets l'espai és escàs
+        weights = [1 if len(SHAPES[p].coords) >= 3 else 4 for p in piece_pool]
+        name = rng.choices(piece_pool, weights=weights, k=1)[0]
         pieces.append(SHAPES[name])
 
     big_pieces = [i for i, p in enumerate(pieces) if len(p.coords) > 1]
@@ -576,22 +451,31 @@ def generate_walls(rng: random.Random,
     if positions is None:
         return None
 
-    goal_idx   = rng.choice(big_pieces)
+    goal_idx = rng.choice(big_pieces)
     goal_piece = pieces[goal_idx]
+
+    start_pos = positions[goal_idx]
 
     # Objectiu: algun cantó del taulell accessible (sense parets)
     wall_set = set(walls)
     corner_candidates = []
     for x in range(W):
         for y in range(H):
-            if (x, y) == positions[goal_idx]:
-                continue
-            if all(0 <= x+dx < W and 0 <= y+dy < H
-                   and (x+dx, y+dy) not in wall_set
-                   for dx, dy in goal_piece.coords):
-                if x == 0 or x + max(dx for dx,_ in goal_piece.coords) == W - 1 \
-                or y == 0 or y + max(dy for _,dy in goal_piece.coords) == H - 1:
-                    corner_candidates.append((x, y))
+            dist = abs(x - start_pos[0]) + abs(y - start_pos[1])
+            if dist >= 2:  # Lluny de l'inici
+                if all(
+                    0 <= x + dx < W
+                    and 0 <= y + dy < H
+                    and (x + dx, y + dy) not in wall_set
+                    for dx, dy in goal_piece.coords
+                ):
+                    if (
+                        x == 0
+                        or x + max(dx for dx, _ in goal_piece.coords) == W - 1
+                        or y == 0
+                        or y + max(dy for _, dy in goal_piece.coords) == H - 1
+                    ):
+                        corner_candidates.append((x, y))
 
     if not corner_candidates:
         return None
@@ -601,100 +485,110 @@ def generate_walls(rng: random.Random,
     return _build_puzzle(W, H, walls, pp, goal_idx, goal_pos)
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  PIPELINE PRINCIPAL
-# ════════════════════════════════════════════════════════════════════════════
+
 
 STRATEGIES = {
-    "classic":  generate_classic,
+    "classic": generate_classic,
     "freeform": generate_freeform,
-    "walls":    generate_walls,
+    "walls": generate_walls,
 }
 
+OUT_DIR = Path("puzzles/custom")
+RNG_SEED = 42
 
-def generate_batch(strategy: str = "classic",
-                   count: int = 5,
-                   min_stars: float = 2.0,
-                   out_dir: Path = Path("puzzles/generated"),
-                   seed: Optional[int] = None,
-                   verbose: bool = True) -> list[Path]:
+def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=500_000, verbose: bool = True,) -> list[Path]:
     """
-    Genera `count` puzzles vàlids (que superin `min_stars`) i els guarda.
-    Usa el model ML entrenat (model_difficulty.pkl) per puntuar; si no
-    existeix, usa la fórmula heurística de fallback.
+    Genera "count" puzzles vàlids (que superin "min_stars") i els guarda.
     Retorna la llista de fitxers generats.
     """
-    rng = random.Random(seed)
-    gen_fn = STRATEGIES[strategy]
-    out_dir.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(RNG_SEED)
+    funcio_generacio = STRATEGIES[strategy]
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Informar si el model ML és disponible
-    model_available = _load_model() is not None
-    source_label = "ML" if model_available else "heurística"
-    print(f"Generant puzzles (estratègia='{strategy}', mínim={min_stars}⭐, puntuació={source_label})...")
-    print(f"{'#':>4}  {'Intent':>6}  {'Movs':>5}  {'Arts':>5}  {'Estats':>8}  {'⭐':>5}  Fitxer")
-    print("─" * 72)
+    print(
+        f"Generant puzzles (estratègia='{strategy}', mínim={min_stars}⭐)...")
+    
 
     generated: list[Path] = []
-    attempts  = 0
+    attempts = 0
     max_attempts = count * 300  # evita bucle infinit
 
     while len(generated) < count and attempts < max_attempts:
         print(attempts)
         attempts += 1
 
-        puzzle = gen_fn(rng)
+        puzzle = funcio_generacio(rng)
         if puzzle is None:
             continue
 
-        # --- FASE 1: Filtre Ràpid amb A* (A estrella) ---
-        # Descartem ràpidament els puzzles que no tenen solució o són evidents
-        min_moves_astar = _quick_astar(puzzle, max_states=15_000)
-        if min_moves_astar is None or min_moves_astar < 13:
+        # 1. Si el taulell està massa buit o massa ple, no serà gaire complex ni eficient de buscar
+        total_cells = sum(len(p.coords) for p in puzzle.pieces)
+        free_cells = (puzzle.W * puzzle.H) - total_cells - len(puzzle.walls)
+        if free_cells < 2 or free_cells > 10:
             continue
 
-        # --- FASE 2: Avaluació Profunda (BFS complet) ---
-        # Només s'executa si el filtre de l'A* indica que el puzle promet
-        metrics = _full_bfs(puzzle, max_states=100_000)
+        # 2. Descartem ràpidament els puzzles que no tenen solució o són evidents amb A*
+        min_moves_astar = _quick_astar(puzzle)
+        if min_moves_astar is None or min_moves_astar < min_steps:
+            continue
+
+        # 3. Només s'executa si el filtre de l'A* indica que el puzle promet
+        metrics = _full_explore(puzzle, max_states)
 
         if not metrics["reachable"]:
             continue
-        if metrics["min_moves"] is None or metrics["min_moves"] < 5:
-            continue  # massa fàcil (comprovació de seguretat)
+        if metrics["min_moves"] is None or metrics["min_moves"] < min_steps:
+            continue  #per si un cas s'ha saltat el filtre d'abans
         if metrics["num_states"] < 20:
             continue  # massa petit
 
-        stars, source = _stars(metrics)
+        eval_metrics = metrics.copy()
+            
+        pred = predict_score_ml(eval_metrics)
+        if pred is not None:
+            stars, source = pred, "ML"
+        else:
+            stars, source = calculate_stars_2(eval_metrics, puzzle), "heurística"
+            
         print(stars)
         if stars < min_stars:
             continue
 
         # Desa el puzzle
-        idx  = len(generated) + 1
+        idx = len(generated) + 1
         name = f"gen_{strategy}_{idx:03d}.json"
-        path = out_dir / name
-        path.write_text(puzzle.to_json(indent=4))
+        path = OUT_DIR / name
+        path.write_text(puzzle.to_json())
         generated.append(path)
 
-        moves_str  = str(metrics["min_moves"])
-        arts_str   = str(metrics["articulation_points"])
+        moves_str = str(metrics["min_moves"])
+        arts_str = str(metrics["articulation_points"])
         states_str = str(metrics["num_states"]) + ("+" if metrics["truncated"] else "")
 
         if verbose:
-            print(f"{idx:>4}  {attempts:>6}  {moves_str:>5}  {arts_str:>5}  {states_str:>8}  {stars:>5.2f}  {name}")
+            print(
+                f"{'#':>4}  {'Intent':>6}  {'Movs':>5}  {'Arts':>5}  {'Estats':>8}  {'⭐':>5}  Fitxer"
+            )
+            print("─" * 72)
+            print(
+                f"{idx:>4}  {attempts:>6}  {moves_str:>5}  {arts_str:>5}  {states_str:>8}  {stars:>5.2f}  {name}"
+            )
+            if metrics["truncated"]:
+                print("Puzzle truncat, pot ser que la puntuació no es correspongui amb la realitat")
 
     if len(generated) < count:
-        print(f"\n⚠ Només s'han generat {len(generated)}/{count} puzzles en {attempts} intents.")
-        print("  Prova de reduir --min-stars o canviar d'estratègia.")
+        print(
+            f"\n⚠ Només s'han generat {len(generated)}/{count} puzzles en {attempts} intents."
+        )
+        print("  Prova de reduir --min-stars, --min-steps, --max-states, o canviar d'estratègia.")
     else:
-        print(f"\n✓ {len(generated)} puzzles generats a '{out_dir}' (puntuació via {source_label})")
+        print(
+            f"\n✓ {len(generated)} puzzles generats a '{OUT_DIR}')"
+        )
 
     return generated
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  CLI
-# ════════════════════════════════════════════════════════════════════════════
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -702,18 +596,19 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--strategy", choices=list(STRATEGIES), default="classic",
-                        help="Estratègia de generació (default: classic)")
-    parser.add_argument("--count", type=int, default=5,
-                        help="Nombre de puzzles a generar (default: 5)")
-    parser.add_argument("--min-stars", type=float, default=2.0,
-                        help="Valoració mínima per acceptar un puzzle (default: 2.0)")
-    parser.add_argument("--out-dir", type=Path, default=Path("puzzles/generated"),
-                        help="Carpeta de sortida (default: puzzles/generated)")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="Llavor aleatòria per a reproduïbilitat")
-    parser.add_argument("--quiet", action="store_true",
-                        help="Suprimeix la sortida detallada")
+
+    parser.add_argument("--strategy", choices=list(STRATEGIES), default="classic", help="Estratègia de generació (default: classic)",)
+
+    parser.add_argument("--count", type=int, default=5, help="Nombre de puzzles a generar (default: 5)")
+
+    parser.add_argument("--min-stars", type=float,default=2.5,help="Valoració mínima per acceptar un puzzle (default: 2.5)",)
+
+    parser.add_argument("--min-steps", type=int,default=15, help="Mínim número de passos de la solució d'A* (default: 15)",)
+
+    parser.add_argument("--max-states", type=int,default=500_000, help="Màxim número d'estats a explorar amb BFS (default: 500_000)",)
+
+    parser.add_argument("--quiet", action="store_true", help="Suprimeix la sortida detallada")
+    
 
     args = parser.parse_args()
 
@@ -721,8 +616,8 @@ def main() -> None:
         strategy=args.strategy,
         count=args.count,
         min_stars=args.min_stars,
-        out_dir=args.out_dir,
-        seed=args.seed,
+        min_steps=args.min_steps,
+        max_states=args.max_states,
         verbose=not args.quiet,
     )
 

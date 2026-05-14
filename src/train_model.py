@@ -5,15 +5,14 @@ from sklearn.metrics import mean_absolute_error
 import joblib #type:ignore
 import os
 
-CSV_PATH = 'puzzles_metrics.csv'
 MODEL_OUTPUT = 'model_difficulty.pkl'
 
-def train_with_validation():
-    if not os.path.exists(CSV_PATH):
-        print(f"Error: No s'ha trobat {CSV_PATH}")
+def train_with_validation(csv_path:str):
+    if not os.path.exists(csv_path):
+        print(f"Error: No s'ha trobat {csv_path}")
         return
 
-    df = pd.read_csv(CSV_PATH)
+    df = pd.read_csv(csv_path)
     train_df = df.dropna(subset=['manual_score'])
 
     if len(train_df) < 10: # Necessitem una mica més de massa crítica per validar
@@ -58,5 +57,12 @@ def train_with_validation():
     joblib.dump(model, MODEL_OUTPUT)
     print(f"✓ Model final guardat a '{MODEL_OUTPUT}'.")
 
+import argparse
+
 if __name__ == "__main__":
-    train_with_validation()
+    parser = argparse.ArgumentParser(description="Entrenador del model de machine learning.")
+    parser.add_argument("--csv-path", type=str, default="puzzles_metrics.csv", help="Fitxer CSV amb les dades d'entrenament")
+    args = parser.parse_args()
+
+    CSV_PATH = args.csv_path
+    train_with_validation(CSV_PATH)

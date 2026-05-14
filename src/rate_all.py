@@ -9,9 +9,16 @@ from pathlib import Path
 import pandas as pd
 from rate import post_vote
 
-CSV_PATH = Path("puzzles_metrics.csv")
+import argparse
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Envia les valoracions dels puzzles al servidor.")
+    parser.add_argument("--puzzles-dir", type=str, default="puzzles/repository", help="Carpeta on hi ha els puzzles a valorar")
+    parser.add_argument("--csv-path", type=str, default="puzzles_metrics.csv", help="Fitxer CSV amb les mètriques")
+    args = parser.parse_args()
+
+    CSV_PATH = Path(args.csv_path)
+    puzzles_dir = Path(args.puzzles_dir)
     token = '019d90b1-6a3c-7000-ad15-514895909854'
     
     if not CSV_PATH.exists():
@@ -29,13 +36,23 @@ if __name__ == "__main__":
         print("El fitxer CSV està buit.")
         sys.exit(0)
 
-    total_puzzles = len(df)
-    print(f"S'han trobat {total_puzzles} valoracions al CSV.")
+    # Només volem pujar els puzzles que existeixin a la carpeta indicada
+    valid_ids = set()
+    if puzzles_dir.exists():
+        for p in puzzles_dir.rglob("*.json"):
+            # Suposant que el nom és puzzle_{id}.json o {id}.json
+            puzzle_id = p.stem.split("_")[-1]
+            valid_ids.add(puzzle_id)
+            
+    df_filtered = df[df['id'].astype(str).isin(valid_ids)]
+
+    total_puzzles = len(df_filtered)
+    print(f"S'han trobat {len(df)} valoracions al CSV. {total_puzzles} pertanyen a '{puzzles_dir}'.")
 
     success_count = 0
     
-    # Iterem per cada fila del DataFrame
-    for _, row in df.iterrows():
+    # Iterem per cada fila filtrada
+    for _, row in df_filtered.iterrows():
         try:
             puzzle_id = str(row['id'])
             stars = float(row['score'])

@@ -29,8 +29,8 @@ def predict_score_ml(metrics: dict[str, Any]) -> float | None:
             'size': metrics['size'],
             'min_moves': metrics['min_moves'],
             'total_states': metrics['num_states'],
-            'articulation_points': metrics['articulation_points_optimal'],
-            'avg_branching': metrics['avg_branching_factor']
+            'articulation_points': metrics['articulation_points'],
+            'avg_branching': metrics['avg_branching']
         }])
         prediction = model.predict(features)[0]
         return round(float(prediction), 2)
@@ -63,7 +63,7 @@ def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
     s_scale       = min(math.log(max(metrics["num_states"], 1)) / log_max, 1.0)
 
 
-    s_bottleneck  = min(metrics["articulation_points_optimal"] / max(metrics["min_moves"], 1), 1.0)
+    s_bottleneck  = min(metrics["articulation_points"] / max(metrics["min_moves"], 1), 1.0)
 
 
     total_cells = sum(len(piece.coords) for piece in puzzle.pieces)
@@ -71,7 +71,7 @@ def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
     # Com més ocupat està el taulell, menys moviments són possibles
     # Un taulell al 90% d'ocupació gairebé no té moviments lliures
     max_branching = 4 * len(puzzle.pieces) * (1 - occupancy)
-    s_freedom = min(metrics["avg_branching_factor"] / max(max_branching, 1.0), 1.0)
+    s_freedom = min(metrics["avg_branching"] / max(max_branching, 1.0), 1.0)
     
 
     moviments = ramp_up(s_difficulty, cap=0.8)
@@ -93,16 +93,54 @@ def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
 
     return round(1 + score * 4)
 
+def set_score(puzzle_id: str, puzzle: Puzzle, csv_path: str | Path) -> float | None:
+    df = pd.read_csv(csv_path)
+    
+    row_mask = df['id'] == puzzle_id
+    if not row_mask.any():
+        print(f"Error: L'ID {puzzle_id} no està al CSV {csv_path}.")
+        return None
+        
+    row = df[row_mask].iloc[0]
+    
+    metrics = {
+        'size': row['size'],
+        'min_moves': row['min_moves'],
+        'num_states': row['total_states'],
+        'articulation_points': row['articulation_points'],
+        'avg_branching': row['avg_branching']
+    }
+    
+    ml_score = predict_score_ml(metrics)
+    
+    if ml_score is not None:
+        score = ml_score
+        print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
+    else:
+        score = calculate_stars_2(metrics, puzzle)
+        print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
+    
+    df.loc[row_mask, 'score'] = score
+    df.to_csv(csv_path, index=False)
+    
+    return score
 
 
-CSV_PATH = 'puzzles_metrics.csv'
+import os
+CSV_PATH = os.environ.get("KLOTSKI_CSV_PATH", 'puzzles_metrics.csv')
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Ús: python src/eval.py <puzzle.json> <graphs/puzzle.graphml>")
+        print("Ús: python src/eval.py <puzzle.json> <graphs/puzzle.graphml> [<csv_path>]")
         sys.exit(1)
 
-    puzzle_path  = Path(sys.argv[1])
+    json_path = Path(sys.argv[1])
     graphml_path = Path(sys.argv[2])
+    
+    if len(sys.argv) > 3:
+        CSV_PATH = sys.argv[3]
+        
+    puzzle_path = json_path
 
     if not puzzle_path.exists():
         print(f"No s'ha trobat el puzzle: {puzzle_path}")
@@ -114,26 +152,8 @@ if __name__ == "__main__":
 
     puzzle = Puzzle.from_json(puzzle_path.read_text())
     puzzle_id = puzzle_path.stem.split("_")[-1]
+    score = set_score(puzzle_id, puzzle, CSV_PATH)
     
-    df = pd.read_csv(CSV_PATH)
-    row = df[df['id']==puzzle_id].iloc[0]
-    
-    metrics = {
-        'size': row['size'],
-        'min_moves': row['min_moves'],
-        'num_states': row['total_states'],
-        'articulation_points_optimal': row['articulation_points'],
-        'avg_branching_factor': row['avg_branching']
-    }
-    
-    # Calculem la nota
-    ml_score = predict_score_ml(metrics)
-    score = ml_score if ml_score is not None else calculate_stars_2(metrics, puzzle)
-    
-    # Actualitzem només la nota al CSV
-    df.loc[df['id'] == puzzle_id, 'score'] = score
-    df.to_csv(CSV_PATH, index=False)
-    
-
-    print(f"\n--- Resultat per a {puzzle_path.name} ---")
-    print(f"\n  ⭐ Valoració: {score} / 5.0")
+    if score is not None:
+        print(f"\n--- Resultat per a {puzzle_path.name} ---")
+        print(f"\n  ⭐ Valoració: {score} / 5.0")

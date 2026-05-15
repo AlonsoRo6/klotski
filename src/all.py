@@ -14,7 +14,6 @@ def run(cmd: list[str]) -> None:
     result = subprocess.run(cmd, text=True)
     if result.returncode != 0:
         print(f"Error executant: {' '.join(cmd)}")
-
         return 
     
 import argparse

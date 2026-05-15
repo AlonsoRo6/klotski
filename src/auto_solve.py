@@ -20,11 +20,19 @@ def run(cmd: list[str]) -> None:
 
 def main() -> None:
     name = input("Nom del puzzle (sense extensió): ").strip()
+    csv_path = input("Fitxer CSV on guardar les mètriques (intro per 'puzzles_metrics.csv'): ").strip()
+    if not csv_path:
+        csv_path = "puzzles_metrics.csv"
+
 
     puzzle_path = Path(f"puzzles/{name}.json")
     graphml_path = Path(f"graphs/{name}.graphml")
     solution_path = Path(f"solutions/{name}.sol.json")
     gif_path = Path(f"solutions_gifs/{name}.gif")
+    
+    graphml_path.parent.mkdir(parents=True, exist_ok=True)
+    solution_path.parent.mkdir(parents=True, exist_ok=True)
+    gif_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not puzzle_path.exists():
         print(f"No s'ha trobat el puzzle: {puzzle_path}")
@@ -33,7 +41,7 @@ def main() -> None:
     
     if not graphml_path.exists():
         print('Executant graph.py...')
-        run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path)])
+        run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), csv_path])
     
     if not solution_path.exists():
         print('Executant solve.py...')

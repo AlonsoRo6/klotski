@@ -36,31 +36,34 @@ def reeval_all(
 
     for eval_path in eval_files:
         # El fitxer es diu, p.ex., "puzzle_0.json" → puzzle és "puzzle_0"
-        puzzle_name = eval_path.name  # nom del puzzle
-        puzzle_path = eval_path  # puzzle.json
+        try:
+            puzzle_name = eval_path.name  # nom del puzzle
+            puzzle_path = eval_path  # puzzle.json
 
-        rel_path = puzzle_path.parent.relative_to(Path("puzzles"))
-        graph_name = eval_path.name.replace(".json", ".graphml")
-        graph_path = graphs_dir / rel_path / graph_name  # graphs/.../puzzle.graphml
+            rel_path = puzzle_path.parent.relative_to(Path("puzzles"))
+            graph_name = eval_path.name.replace(".json", ".graphml")
+            graph_path = graphs_dir / rel_path / graph_name  # graphs/.../puzzle.graphml
 
 
-        graph_path.parent.mkdir(parents=True, exist_ok=True)
-        if not graph_path.exists():
-            run(["python3", "src/graph.py", str(puzzle_path), str(graph_path), str(csv_path)])
+            graph_path.parent.mkdir(parents=True, exist_ok=True)
+            if not graph_path.exists():
+                run(["python3", "src/graph.py", str(puzzle_path), str(graph_path), str(csv_path)])
 
-        puzzle = Puzzle.from_json(puzzle_path.read_text())
-        puzzle_id = puzzle_path.stem.split("_")[-1]
+            puzzle = Puzzle.from_json(puzzle_path.read_text())
+            puzzle_id = puzzle_path.stem.split("_")[-1]
 
-        if not csv_path.exists():
-            print(f"Error: {csv_path} no existeix. Esborra el graf de {puzzle_name} i reintenta-ho.")
-            continue
-            
-        score = set_score(puzzle_id, puzzle, csv_path)
+            if not csv_path.exists():
+                print(f"Error: {csv_path} no existeix. Esborra el graf de {puzzle_name} i reintenta-ho.")
+                continue
+                
+            score = set_score(puzzle_id, puzzle, csv_path)
 
-        if score is not None:
-            print(f"--- Resultat per a {puzzle_path.name} ---")
-            print(f" ⭐ Valoració: {score} / 5.0")
-            print()
+            if score is not None:
+                print(f"--- Resultat per a {puzzle_path.name} ---")
+                print(f" ⭐ Valoració: {score} / 5.0")
+                print()
+        except Exception as e:
+            print(f"Error evaluant {eval_path.name}: {e}")
 
 
 
@@ -82,7 +85,7 @@ if __name__ == "__main__":
     # Cridarem l'eval individual amb el CSV argument
 
     os.environ["KLOTSKI_CSV_PATH"] = args.csv_path
-
+    
     reeval_all(
         puzzles_dir=Path(args.puzzles_dir),
         graphs_dir=Path("graphs"),

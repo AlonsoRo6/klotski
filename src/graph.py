@@ -79,8 +79,6 @@ def save_metrics_to_csv(puzzle_id: str, metrics: dict, csv_path: str):  # type: 
         "total_states": metrics["num_states"],
         "articulation_points": metrics["articulation_points"],
         "avg_branching": metrics["avg_branching"],
-        "score": None,  # Es calcularà a eval.py
-        "manual_score": None,
     }
 
     if os.path.exists(csv_path):
@@ -88,10 +86,7 @@ def save_metrics_to_csv(puzzle_id: str, metrics: dict, csv_path: str):  # type: 
         if puzzle_id in df["id"].values:
             idx = df[df["id"] == puzzle_id].index[0]
             for key, value in new_data.items():
-                if (
-                    key != "manual_score" and key != "score"
-                ):  # Preservem notes existents
-                    df.at[idx, key] = value
+                df.at[idx, key] = value
         else:
             df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
     else:
@@ -155,7 +150,7 @@ def get_normalized_id(puzzle: Puzzle, state: State) -> tuple:  # type: ignore
 NODE_LIMIT = 1_500_000
 
 
-def build_graph(puzzle: Puzzle, node_limit=NODE_LIMIT) -> gt.Graph:
+def build_graph(puzzle: Puzzle, node_limit:int=NODE_LIMIT) -> gt.Graph:
     """
     Construeix el graf del puzzle fent un DFS des de l'estat inicial.
     """
@@ -228,21 +223,25 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 3:
         CSV_PATH = sys.argv[3]
+        
+    try:
+        puzzle = Puzzle.from_json(json_path.read_text())
 
-    puzzle = Puzzle.from_json(json_path.read_text())
+        print("Executant graph.py")
+        g = build_graph(puzzle)
 
-    print("Executant graph.py")
-    g = build_graph(puzzle)
+        puzzle_id = json_path.stem.split("_")[-1]
+        metrics = calculate_metrics_in_graph(g, puzzle)
+        save_metrics_to_csv(puzzle_id, metrics, CSV_PATH)
 
-    puzzle_id = json_path.stem.split("_")[-1]
-    metrics = calculate_metrics_in_graph(g, puzzle)
-    save_metrics_to_csv(puzzle_id, metrics, CSV_PATH)
+        n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])
+        print(f"Nodes (estats): {g.num_vertices()}")
+        print(f"Arestes (moviments): {g.num_edges()}")
+        print(f"Estats finals: {n_goals}")
+        print(f"Resoluble: {'Sí' if n_goals > 0 else 'No'}")
 
-    n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])
-    print(f"Nodes (estats): {g.num_vertices()}")
-    print(f"Arestes (moviments): {g.num_edges()}")
-    print(f"Estats finals: {n_goals}")
-    print(f"Resoluble: {'Sí' if n_goals > 0 else 'No'}")
-
-    g.save(str(output_path))
-    print(f"Graf guardat a {output_path}")
+        g.save(str(output_path))
+        print(f"Graf guardat a {output_path}")
+    
+    except Exception as e:
+        print(f"Error: {e}")

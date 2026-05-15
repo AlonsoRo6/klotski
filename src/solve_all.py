@@ -9,13 +9,13 @@ import subprocess
 from pathlib import Path
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str]) -> bool:
     print(f"\n$ {' '.join(cmd)}") 
     result = subprocess.run(cmd, text=True)
     if result.returncode != 0:
         print(f"Error executant: {' '.join(cmd)}")
-
-        return 
+        return False
+    return True
 
 
 import argparse
@@ -53,7 +53,11 @@ def main() -> None:
         print(f"{'='*40}")
 
         # Mantenim la carpeta custom o repository a les carpetes de sortida
-        rel_path = puzzle_path.parent.relative_to(puzzles_dir)
+        try:
+            rel_path = puzzle_path.parent.relative_to("puzzles")
+        except ValueError:
+            # Per si l'script es crida amb una carpeta que no està dins de "puzzles"
+            rel_path = puzzle_path.parent.relative_to(puzzles_dir)
         
         graphml_path = graphs_dir / rel_path / f"{name}.graphml"
         solution_path = solutions_dir / rel_path / f"{name}.sol.json"
@@ -67,14 +71,20 @@ def main() -> None:
         #Generar Graf
         if not graphml_path.exists():
             print(f'-> Generant graf per a {name}...')
-            run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), str(csv_path)])
+            success = run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), str(csv_path)])
+            if not success:
+                print(f"⚠️ Saltant {name} per un error al graf.")
+                continue
         else:
             print(f"-> El graf ja existeix: {graphml_path}")
 
         # Resoldre
         if not solution_path.exists():
             print(f'-> Resolent {name}...')
-            run(["python3", "src/solve.py", str(graphml_path), str(solution_path)])
+            success = run(["python3", "src/solve.py", str(graphml_path), str(solution_path)])
+            if not success:
+                print(f"⚠️ Saltant {name} per un error al resoldre.")
+                continue
         else:
             print(f"-> La solució ja existeix: {solution_path}")
 

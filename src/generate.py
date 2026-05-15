@@ -9,8 +9,10 @@ Generador de puzzles de Klotski canònics.
   python src/generate.py [--strategy classic|freeform|walls]
                          [--count N]
                          [--min-stars X]
-                         [--out-dir DIR]
+                         [-min-steps Y]
+                         [-max-states Z]
                          [--seed S]
+                         [--quiet]
 
 Exemples:
   python src/generate.py --strategy classic --count 5 --min-stars 2.5
@@ -22,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import heapq
-import itertools
 import math
 import random
 import sys
@@ -102,11 +103,11 @@ def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
     counter = 0
 
     h_start = _heuristic(puzzle, puzzle.start)
-    queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, counter, start_pos)]
+    queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, counter, start_pos)] #type:ignore
     counter += 1
     
     # Millor cost (g) trobat fins ara per a cada estat
-    best_g: dict[tuple, int] = {start_pos: 0}
+    best_g: dict[tuple, int] = {start_pos: 0} #type:ignore
 
     num_states = 0
 
@@ -139,7 +140,7 @@ def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
 
 
 
-def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> dict | None:
+def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> dict | None: #type:ignore
     """
     Exploració completa des de l'estat inicial limitat a `max_states`.
 
@@ -276,35 +277,48 @@ def _goal_positions_for(piece: Piece, W: int, H: int) -> list[Coord]:
 
 
 def generate_classic(
-    rng: random.Random, W: int = 4, H: int = 5, num_small: int = 4, num_medium: int = 3
+    rng: random.Random, W: int = 4, H: int = 5, num_small_range: tuple[int, int] = (4, 6), num_medium_range: tuple[int, int] = (3, 4)
 ) -> Optional[Puzzle]:
     """
     Genera un puzzle estil Klotski clàssic:
     - Peça 2x2 és l'objectiu principal
     - Peces addicionals: 1x2/2x1 (medium) i 1x1 (small)
-    - L'objectiu és moure el 2x2 a la fila inferior centre
+    - S'intenta posar la 2x2 a dalt de tot i l'objectiu a baix
     """
     main_piece = SHAPES["2x2"]
 
     medium_shapes = [SHAPES["1x2"], SHAPES["2x1"]]
     small_shape = SHAPES["1x1"]
+    
+    num_medium = rng.randint(*num_medium_range)
+    num_small = rng.randint(*num_small_range)
 
     medium_pieces = [rng.choice(medium_shapes) for _ in range(num_medium)]
     small_pieces = [small_shape] * num_small
 
     all_pieces = [main_piece] + medium_pieces + small_pieces
 
-    positions = _place_pieces(rng, W, H, [], all_pieces)
+    # Busquem una disposició on el 2x2 comenci a la part superior
+    positions = None
+    for _ in range(15):
+        pos_candidates = _place_pieces(rng, W, H, [], all_pieces)
+        if pos_candidates is not None:
+            if pos_candidates[0][1] <= 1:  # La peça 2x2 està a la meitat superior (y=0 o y=1)
+                positions = pos_candidates
+                break
+            # Si no, ens ho guardem per si no trobem res millor
+            positions = pos_candidates
+
     if positions is None:
         return None
 
     start_pos = positions[0]
 
     # Objectiu: 2x2 al centre baix (o a qualsevol posició del marge inferior)
-    goal_candidates = []
+    goal_candidates: list[Coord] = []
     for x in range(W - 1):
         gy = H - 2
-        # Assegurem que estigui una mica lluny
+        # Assegurem que estigui raonablement lluny
         if abs(x - start_pos[0]) + abs(gy - start_pos[1]) >= 2:
             goal_candidates.append((x, gy))
 
@@ -313,7 +327,7 @@ def generate_classic(
 
     goal_pos = rng.choice(goal_candidates)
 
-    # L'índex de la peça principal (0) canviarà amb l'ordenació canònica
+    # L'índex de la peça principal (0) canviarà amb l'ordenació canònica de _build_puzzle
     pp = list(zip(all_pieces, positions))
     return _build_puzzle(W, H, [], pp, 0, goal_pos)
 
@@ -372,7 +386,7 @@ def generate_freeform(
     start_pos = positions[goal_idx]
 
     # Posició objectiu: vora del taulell (dreta o baix), diferent de l'inicial
-    edge_goals = []
+    edge_goals: list[Coord] = []
     for x in range(W):
         for y in range(H):
             dist = abs(x - start_pos[0]) + abs(y - start_pos[1])
@@ -458,7 +472,7 @@ def generate_walls(
 
     # Objectiu: algun cantó del taulell accessible (sense parets)
     wall_set = set(walls)
-    corner_candidates = []
+    corner_candidates: list[Coord] = []
     for x in range(W):
         for y in range(H):
             dist = abs(x - start_pos[0]) + abs(y - start_pos[1])
@@ -484,9 +498,6 @@ def generate_walls(
     pp = list(zip(pieces, positions))
     return _build_puzzle(W, H, walls, pp, goal_idx, goal_pos)
 
-
-
-
 STRATEGIES = {
     "classic": generate_classic,
     "freeform": generate_freeform,
@@ -494,14 +505,13 @@ STRATEGIES = {
 }
 
 OUT_DIR = Path("puzzles/custom")
-RNG_SEED = 42
 
-def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=500_000, verbose: bool = True,) -> list[Path]:
+def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=500_000, rng_seed: int = 42, verbose: bool = True,) -> list[Path]:
     """
     Genera "count" puzzles vàlids (que superin "min_stars") i els guarda.
     Retorna la llista de fitxers generats.
     """
-    rng = random.Random(RNG_SEED)
+    rng = random.Random(rng_seed)
     funcio_generacio = STRATEGIES[strategy]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -534,6 +544,9 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
 
         # 3. Només s'executa si el filtre de l'A* indica que el puzle promet
         metrics = _full_explore(puzzle, max_states)
+        
+        if metrics is None:
+            continue
 
         if not metrics["reachable"]:
             continue
@@ -607,6 +620,8 @@ def main() -> None:
 
     parser.add_argument("--max-states", type=int,default=500_000, help="Màxim número d'estats a explorar amb BFS (default: 500_000)",)
 
+    parser.add_argument("--seed", type=int,default=42, help="Seed per al generador de números aleatoris (default: 42)")
+
     parser.add_argument("--quiet", action="store_true", help="Suprimeix la sortida detallada")
     
 
@@ -618,6 +633,7 @@ def main() -> None:
         min_stars=args.min_stars,
         min_steps=args.min_steps,
         max_states=args.max_states,
+        rng_seed=args.seed,
         verbose=not args.quiet,
     )
 

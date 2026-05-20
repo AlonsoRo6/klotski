@@ -12,6 +12,8 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
+import os
+
 
 URL = "https://klotski.pauek.dev/api/puzzles"
 
@@ -49,6 +51,7 @@ def upload_puzzle(file_path: Path, token: str) -> bool:
         print(f"[!] Error enviant {file_path}: {e}")
         return False
     
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Ús: python3 src/upload.py <puzzle_path>")
@@ -56,7 +59,6 @@ if __name__ == '__main__':
     
     puzzle_path = Path(sys.argv[1])
     
-    import os
     user = os.environ.get("KLOTSKI_USER")
     if not user:
         user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()

@@ -11,6 +11,8 @@ Generador de puzzles de Klotski canònics.
                          [--min-stars X]
                          [-min-steps Y]
                          [-max-states Z]
+                         [--num-goals M]
+                         [--prefix P]
                          [--seed S]
                          [--quiet]
 
@@ -28,7 +30,7 @@ import math
 import random
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -48,13 +50,41 @@ def _all_occupied(puzzle: Puzzle, state: State) -> set[Coord]:
     return occ
 
 
+def _find_non_overlapping_goals(
+    rng: random.Random,
+    walls: list[Coord],
+    pieces: tuple[Piece, ...],
+    goal_indices: list[int],
+    candidate_funcs: list[Callable[[], list[Coord]]],
+    max_tries: int = 100
+) -> Optional[tuple[tuple[int, Coord], ...]]:
+    wall_set = set(walls)
+    for _ in range(max_tries):
+        goals_chosen = []
+        occupied = set(walls)
+        ok = True
+        for i, idx in enumerate(goal_indices):
+            candidates = candidate_funcs[i]()
+            valid = []
+            for px, py in candidates:
+                if all((px + dx, py + dy) not in occupied for dx, dy in pieces[idx].coords):
+                    valid.append((px, py))
+            if not valid:
+                ok = False
+                break
+            chosen_pos = rng.choice(valid)
+            goals_chosen.append((idx, chosen_pos))
+            occupied |= _cells(pieces[idx], chosen_pos)
+        if ok:
+            return tuple(goals_chosen)
+    return None
+
 def _build_puzzle(
     W: int,
     H: int,
     walls: list[Coord],
     pieces_and_positions: list[tuple[Piece, Coord]],
-    goal_piece_idx: int,
-    goal_pos: Coord,
+    goals: tuple[tuple[int, Coord], ...]
 ) -> Optional[Puzzle]:
     """
     Construeix un Puzzle canònic a partir de les dades.
@@ -64,14 +94,18 @@ def _build_puzzle(
         walls_t = tuple(sorted(set(walls)))
         # Ordenació canònica: (forma, posició_inicial)
         sorted_pp = sorted(pieces_and_positions, key=lambda pp: (pp[0], pp[1]))
-        # El goal_piece_idx és sobre la llista original; cal trobar on ha anat
-        orig_piece = pieces_and_positions[goal_piece_idx][0]
-        orig_pos = pieces_and_positions[goal_piece_idx][1]
-        new_idx = next(i for i, (p, pos) in enumerate(sorted_pp) if p == orig_piece and pos == orig_pos)
+        
+        # Mapejar els índexs originals cap als nous índexs
+        new_goals = []
+        for g_idx, g_pos in goals:
+            orig_piece = pieces_and_positions[g_idx][0]
+            orig_pos = pieces_and_positions[g_idx][1]
+            new_idx = next(i for i, (p, pos) in enumerate(sorted_pp) if p == orig_piece and pos == orig_pos)
+            new_goals.append((new_idx, g_pos))
+            
         pieces = tuple(p for p, _ in sorted_pp)
         start = State(tuple(pos for _, pos in sorted_pp))
-        goals = ((new_idx, goal_pos),)
-        return Puzzle(W, H, walls_t, pieces, start, goals)
+        return Puzzle(W, H, walls_t, pieces, start, tuple(new_goals))
     except Exception:
         return None
 
@@ -277,7 +311,7 @@ def _goal_positions_for(piece: Piece, W: int, H: int) -> list[Coord]:
 
 
 def generate_classic(
-    rng: random.Random, W: int = 4, H: int = 5, num_small_range: tuple[int, int] = (4, 6), num_medium_range: tuple[int, int] = (3, 4)
+    rng: random.Random, W: int = 4, H: int = 5, num_small_range: tuple[int, int] = (4, 6), num_medium_range: tuple[int, int] = (3, 4), num_goals: int = 1
 ) -> Optional[Puzzle]:
     """
     Genera un puzzle estil Klotski clàssic:
@@ -312,24 +346,37 @@ def generate_classic(
     if positions is None:
         return None
 
-    start_pos = positions[0]
+    # Volem que els num_goals objectius vagin a posicions no solapades al fons
+    # El principal serà el 2x2 (index 0). Els altres seran peces aleatòries
+    big_pieces = [i for i, p in enumerate(all_pieces) if len(p.coords) > 1]
+    rng.shuffle(big_pieces)
+    
+    goal_indices = []
+    if 0 in big_pieces:
+        goal_indices.append(0)
+        big_pieces.remove(0)
+        
+    while len(goal_indices) < num_goals and big_pieces:
+        goal_indices.append(big_pieces.pop())
+        
+    while len(goal_indices) < num_goals:
+        goal_indices.append(rng.randint(0, len(all_pieces) - 1))
+        
+    candidate_funcs = []
+    for idx in goal_indices:
+        candidate_funcs.append(lambda i=idx: [
+            (x, y) for x in range(W) for y in range(H)
+            if all(0 <= x + dx < W and 0 <= y + dy < H for dx, dy in all_pieces[i].coords)
+            and abs(x - positions[i][0]) + abs(y - positions[i][1]) >= 2
+            and (y + max(dy for _, dy in all_pieces[i].coords) == H - 1 or y == 0)
+        ])
 
-    # Objectiu: 2x2 al centre baix (o a qualsevol posició del marge inferior)
-    goal_candidates: list[Coord] = []
-    for x in range(W - 1):
-        gy = H - 2
-        # Assegurem que estigui raonablement lluny
-        if abs(x - start_pos[0]) + abs(gy - start_pos[1]) >= 2:
-            goal_candidates.append((x, gy))
-
-    if not goal_candidates:
+    goals = _find_non_overlapping_goals(rng, [], tuple(all_pieces), goal_indices, candidate_funcs)
+    if goals is None:
         return None
 
-    goal_pos = rng.choice(goal_candidates)
-
-    # L'índex de la peça principal (0) canviarà amb l'ordenació canònica de _build_puzzle
     pp = list(zip(all_pieces, positions))
-    return _build_puzzle(W, H, [], pp, 0, goal_pos)
+    return _build_puzzle(W, H, [], pp, goals)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -343,6 +390,7 @@ def generate_freeform(
     H_range: tuple[int, int] = (5, 6),
     num_pieces_range: tuple[int, int] = (6, 12),
     piece_pool: list[str] = FREEFORM_PIECES,
+    num_goals: int = 1
 ) -> Optional[Puzzle]:
     """
     Genera un puzzle amb taulell i peces totalment aleatoris.
@@ -379,33 +427,31 @@ def generate_freeform(
     if positions is None:
         return None
 
-    # Tria una peça gran com a objectiu
-    goal_idx = rng.choice(big_pieces)
-    goal_piece = pieces[goal_idx]
+    big_pieces = [i for i, p in enumerate(pieces) if len(p.coords) > 1]
+    rng.shuffle(big_pieces)
+    
+    goal_indices = []
+    while len(goal_indices) < num_goals and big_pieces:
+        goal_indices.append(big_pieces.pop())
+        
+    while len(goal_indices) < num_goals:
+        goal_indices.append(rng.randint(0, len(pieces) - 1))
+        
+    candidate_funcs = []
+    for idx in goal_indices:
+        candidate_funcs.append(lambda i=idx: [
+            (x, y) for x in range(W) for y in range(H)
+            if all(0 <= x + dx < W and 0 <= y + dy < H for dx, dy in pieces[i].coords)
+            and abs(x - positions[i][0]) + abs(y - positions[i][1]) >= 2
+            and (x + max(dx for dx, _ in pieces[i].coords) == W - 1 or y + max(dy for _, dy in pieces[i].coords) == H - 1 or x == 0 or y == 0)
+        ])
 
-    start_pos = positions[goal_idx]
-
-    # Posició objectiu: vora del taulell (dreta o baix), diferent de l'inicial
-    edge_goals: list[Coord] = []
-    for x in range(W):
-        for y in range(H):
-            dist = abs(x - start_pos[0]) + abs(y - start_pos[1])
-            if dist >= 2:  # Assegurem que estigui una mica lluny
-                if all(
-                    0 <= x + dx < W and 0 <= y + dy < H for dx, dy in goal_piece.coords
-                ):
-                    if (
-                        x + max(dx for dx, _ in goal_piece.coords) == W - 1
-                        or y + max(dy for _, dy in goal_piece.coords) == H - 1
-                    ):
-                        edge_goals.append((x, y))
-
-    if not edge_goals:
+    goals = _find_non_overlapping_goals(rng, [], tuple(pieces), goal_indices, candidate_funcs)
+    if goals is None:
         return None
 
-    goal_pos = rng.choice(edge_goals)
     pp = list(zip(pieces, positions))
-    return _build_puzzle(W, H, [], pp, goal_idx, goal_pos)
+    return _build_puzzle(W, H, [], pp, goals)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -428,6 +474,7 @@ def generate_walls(
     num_walls_range: tuple[int, int] = (3, 6),
     num_pieces_range: tuple[int, int] = (5, 11),
     piece_pool: list[str] = FREEFORM_PIECES,
+    num_goals: int = 1
 ) -> Optional[Puzzle]:
     """
     Genera un puzzle amb parets que creen laberints interiors.
@@ -467,38 +514,32 @@ def generate_walls(
     if positions is None:
         return None
 
-    goal_idx = rng.choice(big_pieces)
-    goal_piece = pieces[goal_idx]
-
-    start_pos = positions[goal_idx]
-
-    # Objectiu: algun cantó del taulell accessible (sense parets)
+    big_pieces = [i for i, p in enumerate(pieces) if len(p.coords) > 1]
+    rng.shuffle(big_pieces)
+    
+    goal_indices = []
+    while len(goal_indices) < num_goals and big_pieces:
+        goal_indices.append(big_pieces.pop())
+        
+    while len(goal_indices) < num_goals:
+        goal_indices.append(rng.randint(0, len(pieces) - 1))
+        
     wall_set = set(walls)
-    corner_candidates: list[Coord] = []
-    for x in range(W):
-        for y in range(H):
-            dist = abs(x - start_pos[0]) + abs(y - start_pos[1])
-            if dist >= 2:  # Lluny de l'inici
-                if all(
-                    0 <= x + dx < W
-                    and 0 <= y + dy < H
-                    and (x + dx, y + dy) not in wall_set
-                    for dx, dy in goal_piece.coords
-                ):
-                    if (
-                        x == 0
-                        or x + max(dx for dx, _ in goal_piece.coords) == W - 1
-                        or y == 0
-                        or y + max(dy for _, dy in goal_piece.coords) == H - 1
-                    ):
-                        corner_candidates.append((x, y))
+    candidate_funcs = []
+    for idx in goal_indices:
+        candidate_funcs.append(lambda i=idx: [
+            (x, y) for x in range(W) for y in range(H)
+            if all(0 <= x + dx < W and 0 <= y + dy < H and (x + dx, y + dy) not in wall_set for dx, dy in pieces[i].coords)
+            and abs(x - positions[i][0]) + abs(y - positions[i][1]) >= 2
+            and (x == 0 or x + max(dx for dx, _ in pieces[i].coords) == W - 1 or y == 0 or y + max(dy for _, dy in pieces[i].coords) == H - 1)
+        ])
 
-    if not corner_candidates:
+    goals = _find_non_overlapping_goals(rng, walls, tuple(pieces), goal_indices, candidate_funcs)
+    if goals is None:
         return None
 
-    goal_pos = rng.choice(corner_candidates)
     pp = list(zip(pieces, positions))
-    return _build_puzzle(W, H, walls, pp, goal_idx, goal_pos)
+    return _build_puzzle(W, H, walls, pp, goals)
 
 STRATEGIES = {
     "classic": generate_classic,
@@ -508,7 +549,7 @@ STRATEGIES = {
 
 OUT_DIR = Path("puzzles/custom")
 
-def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=750_000, rng_seed: int = random.randint(1, 1_000_000), verbose: bool = True,) -> list[Path]:
+def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=750_000, rng_seed: int = random.randint(1, 1_000_000), verbose: bool = True, num_goals: int = 1, prefix: str = None) -> list[Path]:
     """
     Genera "count" puzzles vàlids (que superin "min_stars") i els guarda.
     Retorna la llista de fitxers generats.
@@ -529,7 +570,7 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
     while len(generated) < count and attempts < max_attempts:
         attempts += 1
 
-        puzzle = funcio_generacio(rng)
+        puzzle = funcio_generacio(rng, num_goals=num_goals)
         if puzzle is None:
             continue
 
@@ -579,7 +620,10 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
 
         # Desa el puzzle
         idx = len(generated) + 1
-        name = f"gen_{strategy}_{idx:03d}.json"
+        if prefix:
+            name = f"{prefix}{idx:02d}.json"
+        else:
+            name = f"gen_{strategy}_{idx:03d}.json"
         path = OUT_DIR / name
         path.write_text(puzzle.to_json())
         generated.append(path)
@@ -634,6 +678,10 @@ def main() -> None:
 
     parser.add_argument("--seed", type=int,default=random.randint(1, 1_000_000), help="Seed per al generador de números aleatoris (default: 42)")
 
+    parser.add_argument("--num-goals", type=int, default=1, help="Nombre de peces que han d'arribar a una destinació (default: 1)")
+
+    parser.add_argument("--prefix", type=str, default=None, help="Prefix pel nom dels fitxers generats sense '_' (ex: intent -> intent01.json)")
+
     parser.add_argument("--quiet", action="store_true", help="Suprimeix la sortida detallada")
     
 
@@ -647,6 +695,8 @@ def main() -> None:
         max_states=args.max_states,
         rng_seed=args.seed,
         verbose=not args.quiet,
+        num_goals=args.num_goals,
+        prefix=args.prefix,
     )
 
 

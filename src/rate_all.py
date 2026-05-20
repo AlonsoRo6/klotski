@@ -20,7 +20,11 @@ if __name__ == "__main__":
     CSV_PATH = Path(args.csv_path)
     puzzles_dir = Path(args.puzzles_dir)
     
-    user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
+    import os
+    user = os.environ.get("KLOTSKI_USER")
+    if not user:
+        user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
+
     if user == 'a':
         token = '019d90b1-6a74-7000-bd6e-1ba9c9ca9973'
     elif user == 'x':

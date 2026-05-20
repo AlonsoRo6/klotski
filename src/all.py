@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import subprocess
+import os
+import sys
 
 def run(cmd: list[str]) -> None:
     print(f"\n$ {' '.join(cmd)}") 
@@ -27,6 +29,12 @@ def main() -> None:
     
     parser.add_argument("--skip-download", action="store_true", help="Omet la descàrrega de nous puzzles")
     args = parser.parse_args()
+
+    user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
+    if user not in ('a', 'x'):
+        print("Usuari desconegut. Cancel·lant...")
+        sys.exit(1)
+    os.environ['KLOTSKI_USER'] = user
 
     if not args.skip_download:
         run(['python3', 'src/download.py'])

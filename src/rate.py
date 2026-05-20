@@ -80,7 +80,16 @@ if __name__ == "__main__":
     puzzle_path = Path(sys.argv[1])
     if len(sys.argv) > 2:
         CSV_PATH = Path(sys.argv[2])
-    token = '019d90b1-6a3c-7000-ad15-514895909854'    
+        
+    user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
+    if user == 'a':
+        token = '019d90b1-6a74-7000-bd6e-1ba9c9ca9973'
+    elif user == 'x':
+        token = '019d90b1-6a3c-7000-ad15-514895909854'
+    else:
+        print("Usuari desconegut. Cancel·lant...")
+        sys.exit(1)
+        
     puzzle_id = puzzle_id_from_path(puzzle_path)
     
     stars = load_stars_from_csv(puzzle_id, CSV_PATH)

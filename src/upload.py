@@ -14,10 +14,9 @@ import urllib.request
 from pathlib import Path
 
 URL = "https://klotski.pauek.dev/api/puzzles"
-token = '019d90b1-6a3c-7000-ad15-514895909854'
 
 
-def upload_puzzle(file_path: Path) -> bool:
+def upload_puzzle(file_path: Path, token: str) -> bool:
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             puzzle_data = json.load(f)
@@ -56,8 +55,17 @@ if __name__ == '__main__':
         sys.exit(1)
     
     puzzle_path = Path(sys.argv[1])
+    
+    user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
+    if user == 'a':
+        token = '019d90b1-6a74-7000-bd6e-1ba9c9ca9973'
+    elif user == 'x':
+        token = '019d90b1-6a3c-7000-ad15-514895909854'
+    else:
+        print("Usuari desconegut. Cancel·lant...")
+        sys.exit(1)
 
-    if upload_puzzle(puzzle_path):
+    if upload_puzzle(puzzle_path, token):
         print(f"Puzzle {puzzle_path.name} enviat correctament.")
     else:
         print(f"No s'ha pogut pujar el puzzle {puzzle_path.name}.")

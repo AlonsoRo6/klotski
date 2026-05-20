@@ -19,7 +19,15 @@ if __name__ == "__main__":
 
     CSV_PATH = Path(args.csv_path)
     puzzles_dir = Path(args.puzzles_dir)
-    token = '019d90b1-6a3c-7000-ad15-514895909854'
+    
+    user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
+    if user == 'a':
+        token = '019d90b1-6a74-7000-bd6e-1ba9c9ca9973'
+    elif user == 'x':
+        token = '019d90b1-6a3c-7000-ad15-514895909854'
+    else:
+        print("Usuari desconegut. Cancel·lant...")
+        sys.exit(1)
     
     if not CSV_PATH.exists():
         print(f"Error: El fitxer '{CSV_PATH}' no existeix.")

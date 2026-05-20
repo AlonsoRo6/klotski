@@ -339,9 +339,9 @@ def generate_classic(
 
 def generate_freeform(
     rng: random.Random,
-    W_range: tuple[int, int] = (4, 6),
-    H_range: tuple[int, int] = (4, 6),
-    num_pieces_range: tuple[int, int] = (4, 8),
+    W_range: tuple[int, int] = (5, 7),
+    H_range: tuple[int, int] = (5, 6),
+    num_pieces_range: tuple[int, int] = (6, 12),
     piece_pool: list[str] = FREEFORM_PIECES,
 ) -> Optional[Puzzle]:
     """
@@ -423,16 +423,18 @@ def _gen_walls(rng: random.Random, W: int, H: int, num_walls: int) -> list[Coord
 
 def generate_walls(
     rng: random.Random,
-    W: int = 5,
-    H: int = 5,
-    num_walls_range: tuple[int, int] = (2, 6),
-    num_pieces_range: tuple[int, int] = (3, 6),
+    W_range: tuple[int, int] = (5, 7),
+    H_range: tuple[int, int] = (5, 6),
+    num_walls_range: tuple[int, int] = (3, 6),
+    num_pieces_range: tuple[int, int] = (5, 11),
     piece_pool: list[str] = FREEFORM_PIECES,
 ) -> Optional[Puzzle]:
     """
     Genera un puzzle amb parets que creen laberints interiors.
     Les peces han de navegar al voltant de les parets.
     """
+    W = rng.randint(*W_range)
+    H = rng.randint(*H_range)    
     num_walls = rng.randint(*num_walls_range)
     num_pieces = max(2, rng.randint(*num_pieces_range))
     walls = _gen_walls(rng, W, H, num_walls)
@@ -506,11 +508,12 @@ STRATEGIES = {
 
 OUT_DIR = Path("puzzles/custom")
 
-def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=500_000, rng_seed: int = 42, verbose: bool = True,) -> list[Path]:
+def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=750_000, rng_seed: int = random.randint(1, 1_000_000), verbose: bool = True,) -> list[Path]:
     """
     Genera "count" puzzles vàlids (que superin "min_stars") i els guarda.
     Retorna la llista de fitxers generats.
     """
+    print(f'max_states: {max_states}')
     rng = random.Random(rng_seed)
     funcio_generacio = STRATEGIES[strategy]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -521,10 +524,9 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
 
     generated: list[Path] = []
     attempts = 0
-    max_attempts = count * 300  # evita bucle infinit
-
+    max_attempts = count * 1500  # evita bucle infinit
+    comptador = 0
     while len(generated) < count and attempts < max_attempts:
-        print(attempts)
         attempts += 1
 
         puzzle = funcio_generacio(rng)
@@ -534,15 +536,21 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         # 1. Si el taulell està massa buit o massa ple, no serà gaire complex ni eficient de buscar
         total_cells = sum(len(p.coords) for p in puzzle.pieces)
         free_cells = (puzzle.W * puzzle.H) - total_cells - len(puzzle.walls)
-        if free_cells < 2 or free_cells > 10:
+        
+        # Si busquem puntuacions altes, exigim taulells més atapeïts (més difícils)
+        max_free = 4 if min_stars >= 4.0 else 10
+        
+        if free_cells < 2 or free_cells > max_free:
             continue
 
         # 2. Descartem ràpidament els puzzles que no tenen solució o són evidents amb A*
         min_moves_astar = _quick_astar(puzzle)
+        print(attempts)
         if min_moves_astar is None or min_moves_astar < min_steps:
             continue
 
         # 3. Només s'executa si el filtre de l'A* indica que el puzle promet
+        comptador += 1
         metrics = _full_explore(puzzle, max_states)
         
         if metrics is None:
@@ -554,7 +562,9 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
             continue  #per si un cas s'ha saltat el filtre d'abans
         if metrics["num_states"] < 20:
             continue  # massa petit
-
+        if metrics["min_moves"] > min_moves_astar + 5: #el graf és tan gran que la solució trobada s'allunya masssa de la òptima
+            continue
+        
         eval_metrics = metrics.copy()
             
         pred = predict_score_ml(eval_metrics)
@@ -598,6 +608,8 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         print(
             f"\n✓ {len(generated)} puzzles generats a '{OUT_DIR}')"
         )
+    
+    print(f"S'han explorat {comptador} puzzles amb dfs (graph_tool)")
 
     return generated
 
@@ -618,9 +630,9 @@ def main() -> None:
 
     parser.add_argument("--min-steps", type=int,default=15, help="Mínim número de passos de la solució d'A* (default: 15)",)
 
-    parser.add_argument("--max-states", type=int,default=500_000, help="Màxim número d'estats a explorar amb BFS (default: 500_000)",)
+    parser.add_argument("--max-states", type=int,default=750_000, help="Màxim número d'estats a explorar amb BFS (default: 750_000)",)
 
-    parser.add_argument("--seed", type=int,default=42, help="Seed per al generador de números aleatoris (default: 42)")
+    parser.add_argument("--seed", type=int,default=random.randint(1, 1_000_000), help="Seed per al generador de números aleatoris (default: 42)")
 
     parser.add_argument("--quiet", action="store_true", help="Suprimeix la sortida detallada")
     

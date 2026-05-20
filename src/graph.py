@@ -12,7 +12,7 @@ from pathlib import Path
 import graph_tool.all as gt  # type: ignore
 
 from puzzle import Puzzle, State
-from logic import possible_moves, apply_move, is_goal
+from logic import possible_moves, apply_move, is_goal, astar_path
 from typing import cast
 import pandas as pd
 import os
@@ -54,7 +54,7 @@ def calculate_metrics_in_graph(g: gt.Graph, puzzle: Puzzle) -> dict:  # type: ig
 
     g_optimal = gt.GraphView(g, efilt=edge_is_optimal)
     _, art, _ = label_biconnected_components(g_optimal)
-    num_articulation_points = int(sum(art.a))
+    num_articulation_points = sum(art.a)
 
     avg_branching = sum(v.out_degree() for v in g.vertices()) / num_states
 
@@ -147,10 +147,10 @@ def get_normalized_id(puzzle: Puzzle, state: State) -> tuple:  # type: ignore
     return (fixed_part, free_part)
 
 
-NODE_LIMIT = 1_500_000
+NODE_LIMIT = 2_500_000
 
 
-def build_graph(puzzle: Puzzle, node_limit:int=NODE_LIMIT) -> gt.Graph:
+def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
     """
     Construeix el graf del puzzle fent un DFS des de l'estat inicial.
     """
@@ -181,10 +181,26 @@ def build_graph(puzzle: Puzzle, node_limit:int=NODE_LIMIT) -> gt.Graph:
 
     stack = [puzzle.start]
     get_or_create(puzzle.start)
+    
     i = 1
     while stack:
         if len(state_to_vertex) >= node_limit:
             print(f"Límit de nodes superat ({node_limit}). S'atura la cerca.")
+            
+            # Injectem el camí òptim mitjançant A* perquè el graf trobi la solució
+            print("Executant A* per trobar el camí òptim des de l'inici...")
+            opt_path = astar_path(puzzle, max_states=3_000_000)
+            if opt_path:
+                print(f"A* ha trobat una solució de {len(opt_path)-1} passos. Injectant-la al graf per validar...")
+                for i in range(len(opt_path) - 1):
+                    st_u = State(opt_path[i])
+                    st_v = State(opt_path[i+1])
+                    v_u = get_or_create(st_u)
+                    v_v = get_or_create(st_v)
+                    if not g.edge(v_u, v_v):
+                        g.add_edge(v_u, v_v)
+            else:
+                print("L'A* tampoc ha trobat solució o ha excedit el límit.")
             break
 
         if i % 100000 == 0:
@@ -223,7 +239,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 3:
         CSV_PATH = sys.argv[3]
-        
+
     try:
         puzzle = Puzzle.from_json(json_path.read_text())
 
@@ -242,6 +258,6 @@ if __name__ == "__main__":
 
         g.save(str(output_path))
         print(f"Graf guardat a {output_path}")
-    
+
     except Exception as e:
         print(f"Error: {e}")

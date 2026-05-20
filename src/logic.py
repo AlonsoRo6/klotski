@@ -7,6 +7,8 @@ Permet calcular els moviments possibles i aplicar-los.
 from __future__ import annotations
 
 from puzzle import Puzzle, State, Coord
+import heapq
+
 
 Direction = str  # "N", "E", "S", "W"
 Move = tuple[int, Direction, int]
@@ -128,3 +130,52 @@ def replay_moves(puzzle: Puzzle, moves: list[Move]) -> list[State]:
 def is_goal(puzzle: Puzzle, state: State) -> bool:
     """Comprova si l'estat actual satisfà tots els objectius."""
     return all(state.positions[i] == pos for i, pos in puzzle.goals)
+
+
+def _heuristic(puzzle: Puzzle, state: State) -> int:
+    h = 0
+    for goal_idx, (gx, gy) in puzzle.goals:
+        sx, sy = state.positions[goal_idx]
+        h += abs(sx - gx) + abs(sy - gy)
+    return h
+
+def astar_path(puzzle: Puzzle, max_states: int = 2_000_000) -> list[tuple] | None: #type:ignore
+    start_pos = puzzle.start.positions
+    counter = 0
+    h_start = _heuristic(puzzle, puzzle.start)
+    queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, counter, start_pos)] #type:ignore
+    counter += 1
+    
+    came_from: dict[tuple, tuple] = {} #type:ignore
+    best_g: dict[tuple, int] = {start_pos: 0} #type:ignore
+    num_states = 0
+    
+    while queue and num_states < max_states:
+        f, g, _, pos_tuple = heapq.heappop(queue)
+        state = State(pos_tuple)
+        
+        if g > best_g.get(pos_tuple, float("inf")):
+            continue
+            
+        if is_goal(puzzle, state):
+            path = [pos_tuple]
+            curr = pos_tuple
+            while curr in came_from:
+                curr = came_from[curr]
+                path.append(curr)
+            path.reverse()
+            return path
+            
+        num_states += 1
+        
+        for move in possible_moves(puzzle, state):
+            nstate = apply_move(puzzle, state, move)
+            nb = nstate.positions
+            new_g = g + 1
+            if new_g < best_g.get(nb, float("inf")):
+                best_g[nb] = new_g
+                came_from[nb] = pos_tuple
+                h = _heuristic(puzzle, nstate)
+                heapq.heappush(queue, (new_g + h, new_g, counter, nb))
+                counter += 1
+    return None

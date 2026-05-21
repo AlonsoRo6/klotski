@@ -4,9 +4,11 @@ Genera el graf, la solució i el gif de la solució per a TOTS els puzzles a la 
 """
 
 from __future__ import annotations
-
 import subprocess
 from pathlib import Path
+import argparse
+import os
+import pandas as pd
 
 
 def run(cmd: list[str]) -> bool:
@@ -17,9 +19,6 @@ def run(cmd: list[str]) -> bool:
         return False
     return True
 
-
-import argparse
-import os
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Resol tots els puzzles i genera grafs i gifs.")
@@ -35,7 +34,6 @@ def main() -> None:
     graphs_dir = Path("graphs")
     solutions_dir = Path("solutions")
     gifs_dir = Path("solutions_gifs")
-
 
     puzzle_files = list(puzzles_dir.rglob("*.json"))
 
@@ -68,32 +66,46 @@ def main() -> None:
         solution_path.parent.mkdir(parents=True, exist_ok=True)
         gif_path.parent.mkdir(parents=True, exist_ok=True)
 
-        #Generar Graf
-        if not graphml_path.exists():
-            print(f'-> Generant graf per a {name}...')
-            success = run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), str(csv_path)])
-            if not success:
-                print(f"⚠️ Saltant {name} per un error al graf.")
+
+        # Ens assegurem que existeix el graf i que té les mètriques al CSV
+        puzzle_id = name.split("_")[-1]
+        metrics_exist = False
+        if csv_path.exists():
+            df = pd.read_csv(csv_path)
+            if puzzle_id in df["id"].values:
+                metrics_exist = True
+
+        if not graphml_path.exists() or not metrics_exist:
+            if not graphml_path.exists():
+                print(f'Generant graf per a {name}...')
+            else:
+                print(f"El graf ja existeix a {graphml_path}, però falten les mètriques al CSV...")
+            
+            if not run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), str(csv_path)]):
+                print(f"Saltant {name} per un error al graf.")
                 continue
         else:
-            print(f"-> El graf ja existeix: {graphml_path}")
+            print(f"El graf ja existeix i les mètriques estan al CSV: {graphml_path}")
 
-        # Resoldre
+
+        # Si no ha estat ja resolt, el resolem
         if not solution_path.exists():
-            print(f'-> Resolent {name}...')
+            print(f'Resolent {name}...')
             success = run(["python3", "src/solve.py", str(graphml_path), str(solution_path)])
             if not success:
-                print(f"⚠️ Saltant {name} per un error al resoldre.")
+                print(f"Saltant {name} per un error al resoldre.")
                 continue
         else:
-            print(f"-> La solució ja existeix: {solution_path}")
+            print(f"La solució ja existeix: {solution_path}")
 
-        # Generar GIF
+
+        # Si no ha estat ja generat, generem el GIF
         if not gif_path.exists():
-            print(f'-> Generant GIF per a {name}...')
+            print(f'Generant GIF per a {name}...')
             run(["python3", "src/movie.py", str(puzzle_path), str(solution_path), str(gif_path)])
         else:
-            print(f"-> El GIF ja existeix: {gif_path}")
+            print(f"El GIF ja existeix: {gif_path}")
+
 
     print("\nProcés finalitzat per a tots els puzzles.")
 

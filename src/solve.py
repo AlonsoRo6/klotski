@@ -20,16 +20,14 @@ def find_shortest_path(g: gt.Graph) -> list[int] | None:
     vp_is_start = g.vp["is_start"]
     vp_is_goal  = g.vp["is_goal"]
 
-    start_v = next((v for v in g.vertices() if vp_is_start[v]), None)
-    if start_v is None:
-        raise ValueError("No hi ha node inicial")
-
+    start_v = next((v for v in g.vertices() if vp_is_start[v]))
+    
     goals = [v for v in g.vertices() if vp_is_goal[v]]
     if not goals:
         return None
 
     dist_map = gt.shortest_distance(g, start_v)
-    best_goal = min(goals, key=lambda v: dist_map[v])  # type: ignore
+    best_goal = min(goals, key=lambda v: dist_map[v])
     best_path = gt.shortest_path(g, start_v, best_goal)[0]
 
     return [int(v) for v in best_path]
@@ -50,7 +48,7 @@ def path_to_moves(
     vp_state = g.vp["state"]
 
     moves: list[tuple[int, str, int]] = []
-    real_state: State = puzzle.start
+    real_state = puzzle.start
 
     for i in range(len(path) - 1):
         # Identificador únic de l'estat destí al graf
@@ -63,8 +61,7 @@ def path_to_moves(
         for move in possible_moves(puzzle, real_state):
             candidate = apply_move(puzzle, real_state, move)
             if get_normalized_id(puzzle, candidate) == dest_key:
-                piece_idx, direction, dist = move
-                moves.append((piece_idx, direction, dist))
+                moves.append(move)
                 real_state = candidate
                 found = True
                 break
@@ -98,6 +95,7 @@ if __name__ == "__main__":
     print(f"Solució trobada: {len(path) - 1} moviments")
 
     moves = path_to_moves(g, puzzle, path)
-    output_path.write_text(json.dumps([[p, d, dist] for p, d, dist in moves]))
+    
+    output_path.write_text(json.dumps([list(move) for move in moves]))
     print(f"Solució guardada a {output_path}")
     

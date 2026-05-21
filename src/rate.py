@@ -13,9 +13,9 @@ import sys
 import urllib.request
 from pathlib import Path
 import pandas as pd  # Importat per llegir el CSV centralitzat
+import os
 
 BASE_URL = "https://klotski.pauek.dev"
-import os
 CSV_PATH = Path(os.environ.get("KLOTSKI_CSV_PATH", "puzzles_metrics.csv"))
 
 
@@ -26,9 +26,10 @@ def puzzle_id_from_path(puzzle_path: Path) -> str:
 
 def load_stars_from_csv(puzzle_id: str, csv_path: Path) -> float:
     """Cerca la puntuació del puzzle al fitxer CSV centralitzat."""
+    
     if not csv_path.exists():
         print(f"Error: no s'ha trobat el fitxer '{csv_path}'.")
-        print("Executa primer 'eval.py' per generar les mètriques al CSV.")
+        print("Executa primer 'graph.py' per generar les mètriques al CSV i eval.py per puntuar el puzzle.")
         sys.exit(1)
 
     try:
@@ -81,7 +82,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         CSV_PATH = Path(sys.argv[2])
         
-    import os
     user = os.environ.get("KLOTSKI_USER")
     if not user:
         user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
@@ -95,7 +95,6 @@ if __name__ == "__main__":
         sys.exit(1)
         
     puzzle_id = puzzle_id_from_path(puzzle_path)
-    
     stars = load_stars_from_csv(puzzle_id, CSV_PATH)
 
     if post_vote(puzzle_id, stars, token):

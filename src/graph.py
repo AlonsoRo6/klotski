@@ -6,27 +6,27 @@ Construcció del graf d'un puzzle.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import graph_tool.all as gt  # type: ignore
+from graph_tool.topology import shortest_distance, label_biconnected_components  # type: ignore
 
 from puzzle import Puzzle, State
 from logic import possible_moves, apply_move, is_goal, astar_path
+
+import sys
+from pathlib import Path
 from typing import cast
 import pandas as pd
 import os
-from graph_tool.topology import shortest_distance, label_biconnected_components  # type: ignore
 
 # StateKey és una tupla de posicions que identifica un estat
 StateKey = tuple[tuple[int, int], ...]
-import os
+
 
 CSV_PATH = os.environ.get("KLOTSKI_CSV_PATH", "puzzles_metrics.csv")
 
 
 def calculate_metrics_in_graph(g: gt.Graph, puzzle: Puzzle) -> dict:  # type: ignore
-    """Càlcul de mètriques idèntic al de eval.py"""
+    """Càlcul de les mètriques del graf d'un puzzle"""
     vp_is_start = g.vp["is_start"]
     vp_is_goal = g.vp["is_goal"]
 
@@ -52,7 +52,7 @@ def calculate_metrics_in_graph(g: gt.Graph, puzzle: Puzzle) -> dict:  # type: ig
         ):
             edge_is_optimal[e] = True
 
-    g_optimal = gt.GraphView(g, efilt=edge_is_optimal)
+    g_optimal = gt.GraphView(g, efilt=edge_is_optimal) #creem un subgraf amb només les arestes òptimes
     _, art, _ = label_biconnected_components(g_optimal)
     num_articulation_points = sum(art.a)
 
@@ -92,7 +92,7 @@ def save_metrics_to_csv(puzzle_id: str, metrics: dict, csv_path: str):  # type: 
     else:
         df = pd.DataFrame([new_data])
 
-    df.to_csv(CSV_PATH, index=False)
+    df.to_csv(csv_path, index=False)
     print(f"Mètriques guardades al CSV per a {puzzle_id}")
 
 
@@ -149,7 +149,6 @@ def get_normalized_id(puzzle: Puzzle, state: State) -> tuple:  # type: ignore
 
 NODE_LIMIT = 2_500_000
 
-
 def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
     """
     Construeix el graf del puzzle fent un DFS des de l'estat inicial.
@@ -161,12 +160,12 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
     vp_is_start = g.new_vertex_property("bool")
     vp_is_goal = g.new_vertex_property("bool")
 
-    # Propietat del graf
+    # Propietats del graf
     gp_puzzle = g.new_graph_property("string")
     gp_puzzle[g] = puzzle.to_json()
     g.graph_properties["puzzle"] = gp_puzzle
 
-    # La clau del diccionari és la versió normalitzada de l'estat
+    # Les keys del diccionari són la versió normalitzada de l'estat
     state_to_vertex: dict[tuple, gt.Vertex] = {}  # type: ignore
 
     def get_or_create(state: State) -> gt.Vertex:
@@ -174,7 +173,7 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
         if key not in state_to_vertex:  # si encara no l'havíem visitat: creem
             v = g.add_vertex()
             vp_state[v] = state_to_str(state)
-            vp_is_start[v] = state == puzzle.start
+            vp_is_start[v] = (state == puzzle.start)
             vp_is_goal[v] = is_goal(puzzle, state)
             state_to_vertex[key] = v
         return state_to_vertex[key]
@@ -184,17 +183,18 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
     
     i = 1
     while stack:
+        
         if len(state_to_vertex) >= node_limit:
             print(f"Límit de nodes superat ({node_limit}). S'atura la cerca.")
-            
-            # Injectem el camí òptim mitjançant A* perquè el graf trobi la solució
+
             print("Executant A* per trobar el camí òptim des de l'inici...")
             opt_path = astar_path(puzzle, max_states=3_000_000)
+            
             if opt_path:
-                print(f"A* ha trobat una solució de {len(opt_path)-1} passos. Injectant-la al graf per validar...")
-                for i in range(len(opt_path) - 1):
-                    st_u = State(opt_path[i])
-                    st_v = State(opt_path[i+1])
+                print(f"A* ha trobat una solució de {len(opt_path)-1} passos. Validant la solució...")
+                for j in range(len(opt_path) - 1):
+                    st_u = State(opt_path[j])
+                    st_v = State(opt_path[j+1])
                     v_u = get_or_create(st_u)
                     v_v = get_or_create(st_v)
                     if not g.edge(v_u, v_v):
@@ -214,7 +214,7 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
             new_state = apply_move(puzzle, state, move)
             new_key = get_normalized_id(puzzle, new_state)
 
-            if new_key not in state_to_vertex:
+            if new_key not in state_to_vertex: #si encara no l'hem visitat, afegim a l'stack
                 stack.append(new_state)
 
             v_new = get_or_create(new_state)
@@ -243,8 +243,14 @@ if __name__ == "__main__":
     try:
         puzzle = Puzzle.from_json(json_path.read_text())
 
-        print("Executant graph.py")
-        g = build_graph(puzzle)
+        if output_path.exists():
+            print(f"El graf ja existeix a {output_path}. Carregant...")
+            g = gt.load_graph(str(output_path))
+        else:
+            print("Executant graph.py")
+            g = build_graph(puzzle)
+            g.save(str(output_path))
+            print(f"Graf guardat a {output_path}")
 
         puzzle_id = json_path.stem.split("_")[-1]
         metrics = calculate_metrics_in_graph(g, puzzle)
@@ -255,9 +261,6 @@ if __name__ == "__main__":
         print(f"Arestes (moviments): {g.num_edges()}")
         print(f"Estats finals: {n_goals}")
         print(f"Resoluble: {'Sí' if n_goals > 0 else 'No'}")
-
-        g.save(str(output_path))
-        print(f"Graf guardat a {output_path}")
 
     except Exception as e:
         print(f"Error: {e}")

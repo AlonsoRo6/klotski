@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from puzzle import Coord, Piece, Puzzle, State
 from logic import valid_placement, possible_moves, apply_move, is_goal
-from eval import predict_score_ml, calculate_stars_2
+from eval import predict_score_ml
 
 def _cells(piece: Piece, pos: Coord) -> set[Coord]:
     px, py = pos
@@ -611,8 +611,6 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         pred = predict_score_ml(eval_metrics)
         if pred is not None:
             stars, source = pred, "ML"
-        else:
-            stars, source = calculate_stars_2(eval_metrics, puzzle), "heurística"
             
         print(stars)
         if stars < min_stars:

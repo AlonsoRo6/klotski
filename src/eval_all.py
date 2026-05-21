@@ -6,22 +6,21 @@ el graf generat, crea el graf i després fa la valoració.
 """
 
 from __future__ import annotations
-
 import sys
 from pathlib import Path
+import os
+import argparse
 
 from eval import set_score
 from auto_solve import run
 from puzzle import Puzzle
-import os
-import argparse
+
 
 
 
 def reeval_all(
     puzzles_dir: Path,
     graphs_dir: Path,
-    evals_dir: Path,
     csv_path: Path,
 ) -> None:
 
@@ -34,14 +33,12 @@ def reeval_all(
 
     print(f"Trobats {len(eval_files)} puzzles per valorar. Avaluant...\n")
 
-    for eval_path in eval_files:
-        # El fitxer es diu, p.ex., "puzzle_0.json" → puzzle és "puzzle_0"
+    for puzzle_path in eval_files:
         try:
-            puzzle_name = eval_path.name  # nom del puzzle
-            puzzle_path = eval_path  # puzzle.json
+            puzzle_name = puzzle_path.name  # nom del puzzle
 
             rel_path = puzzle_path.parent.relative_to(Path("puzzles"))
-            graph_name = eval_path.name.replace(".json", ".graphml")
+            graph_name = puzzle_path.name.replace(".json", ".graphml")
             graph_path = graphs_dir / rel_path / graph_name  # graphs/.../puzzle.graphml
 
 
@@ -62,8 +59,9 @@ def reeval_all(
                 print(f"--- Resultat per a {puzzle_path.name} ---")
                 print(f" ⭐ Valoració: {score} / 5.0")
                 print()
+                
         except Exception as e:
-            print(f"Error evaluant {eval_path.name}: {e}")
+            print(f"Error evaluant {puzzle_path.name}: {e}")
 
 
 
@@ -89,6 +87,5 @@ if __name__ == "__main__":
     reeval_all(
         puzzles_dir=Path(args.puzzles_dir),
         graphs_dir=Path("graphs"),
-        evals_dir=Path("evals"),
         csv_path=Path(args.csv_path),
     )

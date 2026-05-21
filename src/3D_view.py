@@ -23,9 +23,9 @@ from pathlib import Path
 
 import graph_tool.all as gt  # type: ignore[import-untyped]
 
-from graph import state_key, StateKey
+from graph import state_key, StateKey, get_normalized_id
 from logic import Move, replay_moves
-from puzzle import Puzzle
+from puzzle import Puzzle, State
 
 def solution_edges(
     g: gt.Graph, puzzle: Puzzle, moves: list[Move],
@@ -36,16 +36,17 @@ def solution_edges(
     """
     state_prop = g.vp["state"]
 
-    # Mapa clau canònica → id de vèrtex
-    key_to_id: dict[StateKey, str] = {}
+    # Mapa clau normalitzada → id de vèrtex
+    key_to_id: dict[tuple, str] = {}
     for v in g.vertices():
-        key_to_id[state_key(puzzle, state_prop[v])] = str(int(v))
+        s = State(state_key(puzzle, state_prop[v]))
+        key_to_id[get_normalized_id(puzzle, s)] = str(int(v))
 
     states = replay_moves(puzzle, moves)
     edges: set[tuple[str, str]] = set()
     for i in range(len(states) - 1):
-        src = key_to_id[state_key(puzzle, states[i])]
-        tgt = key_to_id[state_key(puzzle, states[i + 1])]
+        src = key_to_id[get_normalized_id(puzzle, states[i])]
+        tgt = key_to_id[get_normalized_id(puzzle, states[i + 1])]
         edges.add((src, tgt))
 
     return edges
@@ -121,10 +122,10 @@ VIEWER_HTML = """\
 
                 const Graph = new ForceGraph3D(document.getElementById("3d-graph"))
                     .graphData(data)
-                    .d3AlphaDecay(0.005)
-                    .d3VelocityDecay(0.3)
-                    .cooldownTime(30000)
-                    .warmupTicks(100)
+                    .d3AlphaDecay(0.0228)  // Valor per defecte optimitzat (es frena abans)
+                    .d3VelocityDecay(0.4)   // Augmentem una mica la fricció per evitar rebots infinits
+                    .cooldownTime(5000)     // Reduït de 30s a 5s (més que suficient per estabilitzar-se)
+                    .warmupTicks(0)         // S'elimina el bloqueig inicial; el graf es renderitza a l'instant
                     .backgroundColor("#000000")
                     .nodeRelSize(8)
                     .nodeVal(n => n.is_start ? 5 : n.is_goal ? 3 : 1)

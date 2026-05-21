@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 import pandas as pd
 from rate import post_vote
-
+import os
 import argparse
 
 if __name__ == "__main__":
@@ -20,7 +20,6 @@ if __name__ == "__main__":
     CSV_PATH = Path(args.csv_path)
     puzzles_dir = Path(args.puzzles_dir)
     
-    import os
     user = os.environ.get("KLOTSKI_USER")
     if not user:
         user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
@@ -33,9 +32,9 @@ if __name__ == "__main__":
         print("Usuari desconegut. Cancel·lant...")
         sys.exit(1)
     
+
     if not CSV_PATH.exists():
         print(f"Error: El fitxer '{CSV_PATH}' no existeix.")
-        print("Executa primer 'eval_all.py' (o eval.py per a cada puzzle) per generar el CSV.")
         sys.exit(1)
 
     try:
@@ -62,7 +61,6 @@ if __name__ == "__main__":
     print(f"S'han trobat {len(df)} valoracions al CSV. {total_puzzles} pertanyen a '{puzzles_dir}'.")
 
     success_count = 0
-    
     # Iterem per cada fila filtrada
     for _, row in df_filtered.iterrows():
         try:

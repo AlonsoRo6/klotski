@@ -38,7 +38,6 @@ def main() -> None:
         print(f"No s'ha trobat el puzzle: {puzzle_path}")
         sys.exit(1)
 
-    
     if not graphml_path.exists():
         print('Executant graph.py...')
         run(["python3", "src/graph.py", str(puzzle_path), str(graphml_path), csv_path])

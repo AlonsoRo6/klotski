@@ -1,14 +1,12 @@
 """
-Avalua un puzzle fent servir unes mètriques específiques, i guarda la valoració a la carpeta evals.
+Avalua un puzzle fent servir unes mètriques específiques, i guarda la valoració al csv corresponent.
 
 Ús: python src/eval.py <puzzle.json> <graphs/puzzle.graphml>
 """
-
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-import math
 from puzzle import Puzzle
 import os
 import pandas as pd 
@@ -39,60 +37,6 @@ def predict_score_ml(metrics: dict[str, Any]) -> float | None:
         return None
 
 
-
-def ramp_up(x:float, good:float=0.5, cap:float=1.0):
-    """Millor com més alt, però cap a partir de 'cap'. Bo a partir de 'good'."""
-    if x >= cap: return 1.0
-    if x <= 0:   return 0.0
-    return x / cap
-
-def tent(x:float, peak:float=0.4, width:float=0.3):
-    """Punt òptim a 'peak', cau linealment a banda i banda dins 'width'."""
-    dist = abs(x - peak)
-    if dist >= width: return 0.0
-    return 1.0 - dist / width
-
-def calculate_stars_2(metrics: dict, puzzle: Puzzle) -> float: #type: ignore
-    W, H = puzzle.W, puzzle.H
-    max_cells = W * H
-
-    s_difficulty  = min(metrics["min_moves"] / max_cells, 1.0)
-    
-    
-    log_max       = sum(math.log(i) for i in range(1, max_cells + 1))
-    s_scale       = min(math.log(max(metrics["num_states"], 1)) / log_max, 1.0)
-
-
-    s_bottleneck  = min(metrics["articulation_points"] / max(metrics["min_moves"], 1), 1.0)
-
-
-    total_cells = sum(len(piece.coords) for piece in puzzle.pieces)
-    occupancy = total_cells / (puzzle.W * puzzle.H) 
-    # Com més ocupat està el taulell, menys moviments són possibles
-    # Un taulell al 90% d'ocupació gairebé no té moviments lliures
-    max_branching = 4 * len(puzzle.pieces) * (1 - occupancy)
-    s_freedom = min(metrics["avg_branching"] / max(max_branching, 1.0), 1.0)
-    
-
-    moviments = ramp_up(s_difficulty, cap=0.8)
-    mida = ramp_up(s_scale,      cap=0.35)
-    ampolla = tent(s_bottleneck, peak=0.4, width=0.35)
-    llibertat = tent(s_freedom,    peak=0.4, width=0.35)
-    
-    print(f'Moviments: {moviments}')
-    print(f'Mida: {mida}')
-    print(f"Colls d'ampolla: {ampolla}")
-    print(f'Graus llibertat: {llibertat}')
-
-    score = (
-        0.35 * moviments +  # bo si supera ~40% del taulell
-        0.30 * mida +  # bo si hi ha molts estats
-        0.20 * ampolla +  # òptim: uns pocs embuts
-        0.15 * llibertat    # òptim: branching moderat
-    )
-
-    return round(1 + score * 4)
-
 def set_score(puzzle_id: str, puzzle: Puzzle, csv_path: str | Path) -> float | None:
     df = pd.read_csv(csv_path)
     
@@ -111,14 +55,8 @@ def set_score(puzzle_id: str, puzzle: Puzzle, csv_path: str | Path) -> float | N
         'avg_branching': row['avg_branching']
     }
     
-    ml_score = predict_score_ml(metrics)
-    
-    if ml_score is not None:
-        score = ml_score
-        print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
-    else:
-        score = calculate_stars_2(metrics, puzzle)
-        print(f"  ⭐ Valoració (Fórmula): {score} / 5.0")
+    score = predict_score_ml(metrics)
+    print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
     
     df.loc[row_mask, 'score'] = score
     df.to_csv(csv_path, index=False)
@@ -126,7 +64,6 @@ def set_score(puzzle_id: str, puzzle: Puzzle, csv_path: str | Path) -> float | N
     return score
 
 
-import os
 CSV_PATH = os.environ.get("KLOTSKI_CSV_PATH", 'puzzles_metrics.csv')
 
 if __name__ == "__main__":

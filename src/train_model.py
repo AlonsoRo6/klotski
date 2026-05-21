@@ -4,6 +4,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 import joblib #type:ignore
 import os
+import argparse
+
 
 MODEL_OUTPUT = 'model_difficulty.pkl'
 
@@ -57,7 +59,6 @@ def train_with_validation(csv_path:str):
     joblib.dump(model, MODEL_OUTPUT)
     print(f"✓ Model final guardat a '{MODEL_OUTPUT}'.")
 
-import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entrenador del model de machine learning.")

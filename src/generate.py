@@ -3,7 +3,7 @@ Generador de puzzles de Klotski canònics.
 
   - 'classic'  : taulell 4x5 amb peça 2x2 principal (Klotski clàssic)
   - 'freeform' : taulell i peces aleatòries dins uns paràmetres
-  - 'walls'    : taulell amb parets que creen laberints
+  - 'walls'    : taulell amb parets
 
 Ús:
   python src/generate.py [--strategy classic|freeform|walls]
@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import heapq
-import math
 import random
 import sys
 from pathlib import Path
@@ -35,8 +34,9 @@ from typing import Optional, Callable
 sys.path.insert(0, str(Path(__file__).parent))
 
 from puzzle import Coord, Piece, Puzzle, State
-from logic import valid_placement, possible_moves, apply_move, is_goal
+from logic import possible_moves, apply_move, is_goal
 from eval import predict_score_ml
+
 
 def _cells(piece: Piece, pos: Coord) -> set[Coord]:
     px, py = pos
@@ -58,6 +58,7 @@ def _find_non_overlapping_goals(
     candidate_funcs: list[Callable[[], list[Coord]]],
     max_tries: int = 100
 ) -> Optional[tuple[tuple[int, Coord], ...]]:
+    
     wall_set = set(walls)
     for _ in range(max_tries):
         goals_chosen = []
@@ -106,6 +107,7 @@ def _build_puzzle(
         pieces = tuple(p for p, _ in sorted_pp)
         start = State(tuple(pos for _, pos in sorted_pp))
         return Puzzle(W, H, walls_t, pieces, start, tuple(new_goals))
+    
     except Exception:
         return None
 
@@ -205,6 +207,7 @@ def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> dict | None: #ty
         metrics["reachable"] = True
         metrics["truncated"] = truncated
         return metrics
+
     except ImportError:
         print("No s'ha pogut generar el graf complet. No s'han pogut calcular les mètriques.")
         return None
@@ -253,6 +256,7 @@ def _place_pieces(
     Intenta col·locar totes les peces sense solapar-se ni solapar les parets.
     Retorna la llista de posicions o None si falla.
     """
+
     wall_set = set(walls)
 
     def fits(piece: Piece, pos: Coord, occupied: set[Coord]) -> bool:
@@ -440,9 +444,10 @@ def generate_freeform(
     candidate_funcs = []
     for idx in goal_indices:
         candidate_funcs.append(lambda i=idx: [
-            (x, y) for x in range(W) for y in range(H)
-            if all(0 <= x + dx < W and 0 <= y + dy < H for dx, dy in pieces[i].coords)
+            (x, y) for x in range(W) for y in range(H) if all(0 <= x + dx < W and 0 <= y + dy < H for dx, dy in pieces[i].coords)
+            
             and abs(x - positions[i][0]) + abs(y - positions[i][1]) >= 2
+            
             and (x + max(dx for dx, _ in pieces[i].coords) == W - 1 or y + max(dy for _, dy in pieces[i].coords) == H - 1 or x == 0 or y == 0)
         ])
 

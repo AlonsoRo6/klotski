@@ -31,21 +31,21 @@ def train_with_validation(csv_path:str):
         
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
 
-        # 2. Entrenem amb el 80%
+        # 2. Entrenem amb el 85%
         model = RandomForestRegressor(n_estimators=100, random_state=42)
         model.fit(X_train, y_train)
         
 
-        # 3. EXAMEN: Predim la nota dels puzzles que el model NO ha vist mai (el 20%)
+        # 3. EXAMEN: Predim la nota dels puzzles que el model NO ha vist mai (el 15%)
         predictions = model.predict(X_test)
         
-        # 4. Calculem l'error mitjà (MAE)
+        # 4. Calculem l'error mitjà
         error = mean_absolute_error(y_test, predictions)
 
         train_preds = model.predict(X_train)
         train_error = mean_absolute_error(y_train, train_preds)
         print(f"Error en dades d'estudi: {train_error:.2f}")
-        print(f"Error en dades d'examen: {error:.2f}") # L'error que ja calculaves
+        print(f"Error en dades d'examen: {error:.2f}")
         
         print("\n--- Resultats de la validació ---")
         for real, pred in zip(y_test, predictions):
@@ -53,7 +53,7 @@ def train_with_validation(csv_path:str):
         
         print(f"\nError mitjà absolut: {error:.2f} estrelles.")
         
-        # Finalment, tornem a entrenar amb EL 100% per a que el model sigui el més fort possible
+        # Finalment, tornem a entrenar amb el 100% per a que el model sigui el més fort possible
         model.fit(X, y)
 
     joblib.dump(model, MODEL_OUTPUT)

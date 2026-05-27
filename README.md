@@ -97,7 +97,7 @@ Aquests programes serveixen per processar carpetes de puzzles senceres i guardar
 * `--csv-path`: Fitxer CSV on es llegeixen o s'escriuen les mètriques i notes.
 
 Exemples:
-* **Executar tota la cadena per lots** (Descarrega, resol, avalua i puja els vots):
+* **Executar tots els programes** (Descarrega, resol, avalua i puja els vots):
   ```bash
   python src/all.py [--puzzles-dir DIR] [--csv-path CSV] [--skip-download]
   ```
@@ -131,14 +131,14 @@ El projecte està dividit en diferents programes petits, dissenyats en la mesura
 - **`src/download.py`**: Es connecta al repositori remot per descarregar els puzzles.
 - **`src/graph.py`**: Llegeix el puzzle i genera el graf d'estats fent servir la llibreria graph-tool. També extreu les mètriques del graf i les guarda al fitxer CSV.
 - **`src/solve.py`**: Resol un puzzle concret fent servir el graf d'estats per trobar el camí òptim i ho guarda en un JSON.
-- **`src/eval.py`**: Calcula una nota de l'1 al 5 (decimal) d'un puzzle segons les mètriques obtingudes del seu graf. Actualitza el CSV amb la nota calculada.
+- **`src/eval.py`**: Calcula una nota del 0 al 5 (decimal) d'un puzzle segons les mètriques obtingudes del seu graf. Actualitza el CSV amb la nota calculada.
 - **`src/rate.py`**: Envia les puntuacions obtingudes localment al repositori del projecte.
 - **`src/generate.py`**: Genera puzzles sota diverses estratègies i amb uns certs paràmetres.
 - **`src/upload.py`**: Puja els puzzles generats al repositori del projecte.
 - **`src/play.py`, `src/image.py`, `src/movie.py`, `src/3D_view.py`**: Serveixen respectivament per jugar al puzzle manualment, generar una imatge fixa de l'estat inicial, fer una gravació de la solució o veure el graf generat en 3D.
 - **`src/train_model.py`**: Programa per entrenar un model de Machine Learning (RandomForest) encarregat de valorar i avaluar els puzzles generats. El model resultant es guarda a `model_difficulty.pkl`.
 - **`src/puzzle.py`, `src/logic.py`**: Programes auxiliars de classes i funcions lògiques per gestionar regles, coordenades, peces i la lògica del joc.
-- **`src/auto_solve.py`**: Demana a l'usuari que introdueixi la ruta d'un puzzle i el nom d'un CSV i genera el graf, la solcuió i les mètriques d'aquell puzzl
+- **`src/auto_solve.py`**: Demana a l'usuari que introdueixi la ruta d'un puzzle i el nom d'un CSV i genera el graf, la solució i les mètriques d'aquell puzzle.
 
 ### Programes "All"
 Aquests scripts automatitzen processos executant seqüencialment les eines base sobre el directori `puzzles/`:

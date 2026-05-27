@@ -242,8 +242,9 @@ if __name__ == "__main__":
 
     try:
         puzzle = Puzzle.from_json(json_path.read_text())
-
-        if output_path.exists():
+        if puzzle.W*puzzle.H > 64:
+            print(f"El puzzle és massa gran: {puzzle.W}x{puzzle.H}. Saltant generació.")
+        elif output_path.exists():
             print(f"El graf ja existeix a {output_path}. Carregant...")
             g = gt.load_graph(str(output_path))
         else:
@@ -251,16 +252,27 @@ if __name__ == "__main__":
             g = build_graph(puzzle)
             g.save(str(output_path))
             print(f"Graf guardat a {output_path}")
-
+        
+        
         puzzle_id = json_path.stem.split("_")[-1]
-        metrics = calculate_metrics_in_graph(g, puzzle)
+        if puzzle.W*puzzle.H <= 64:
+            metrics = calculate_metrics_in_graph(g, puzzle)
+            n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])
+            print(f"Nodes (estats): {g.num_vertices()}")
+            print(f"Arestes (moviments): {g.num_edges()}")
+            print(f"Estats finals: {n_goals}")
+            print(f"Resoluble: {'Sí' if n_goals > 0 else 'No'}")
+            
+        else:
+            metrics = {
+                "size": puzzle.W * puzzle.H,
+                "min_moves": 0,
+                "num_states": 0,
+                "articulation_points": 0,
+                "avg_branching": 0 }
+
         save_metrics_to_csv(puzzle_id, metrics, CSV_PATH)
 
-        n_goals = sum(1 for v in g.vertices() if g.vp["is_goal"][v])
-        print(f"Nodes (estats): {g.num_vertices()}")
-        print(f"Arestes (moviments): {g.num_edges()}")
-        print(f"Estats finals: {n_goals}")
-        print(f"Resoluble: {'Sí' if n_goals > 0 else 'No'}")
 
     except Exception as e:
         print(f"Error: {e}")

@@ -1,6 +1,6 @@
 """
 Genera el graf, la solució i el gif de la solució d'un puzzle.
-Ús: python src/auto_solve.py
+Ús: python3 src/auto_solve.py 
 """
 
 from __future__ import annotations

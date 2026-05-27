@@ -1,9 +1,9 @@
 """
 Envia la valoració d'un puzzle al repositori klotski.pauek.dev.
-Llegeix la puntuació del fitxer puzzles_metrics.csv generat per eval.py.
-L'ID del puzzle s'extreu del nom del fitxer (format: puzzle_N_<id>.json).
+Llegeix la puntuació del fitxer ..._metrics.csv.
+L'ID del puzzle s'extreu del nom del fitxer: puzzle_<id>.json
 
-Ús: python rate.py <puzzle_N_<id>.json> <token>
+Ús: python rate.py <puzzle_<id>.json> [<csv_path>]
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
-import pandas as pd  # Importat per llegir el CSV centralitzat
+import pandas as pd
 import os
 
 BASE_URL = "https://klotski.pauek.dev"
@@ -25,7 +25,7 @@ def puzzle_id_from_path(puzzle_path: Path) -> str:
 
 
 def load_stars_from_csv(puzzle_id: str, csv_path: Path) -> float:
-    """Cerca la puntuació del puzzle al fitxer CSV centralitzat."""
+    """Busca la puntuació del puzzle al fitxer CSV."""
     
     if not csv_path.exists():
         print(f"Error: no s'ha trobat el fitxer '{csv_path}'.")
@@ -34,14 +34,12 @@ def load_stars_from_csv(puzzle_id: str, csv_path: Path) -> float:
 
     try:
         df = pd.read_csv(csv_path)
-        # Busquem la fila que coincideixi amb l'ID
-        row = df[df['id'] == puzzle_id]
 
+        row = df[df['id'] == puzzle_id]
         if row.empty:
             print(f"Error: L'ID '{puzzle_id}' no existeix al CSV.")
             sys.exit(1)
 
-        # Retornem el valor de la columna 'score'
         return float(row.iloc[0]['score'])
     
     except Exception as e:
@@ -50,6 +48,7 @@ def load_stars_from_csv(puzzle_id: str, csv_path: Path) -> float:
 
 
 def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
+    '''Penja al repositori la puntuació extreta del CSV. Retorna True si ho aconsegueix i False altrament.'''
     url = f"{BASE_URL}/api/puzzles/{puzzle_id}/votes"
     payload = json.dumps({"stars": round(stars)}).encode("utf-8")
 
@@ -91,7 +90,7 @@ if __name__ == "__main__":
     elif user == 'x':
         token = '019d90b1-6a3c-7000-ad15-514895909854'
     else:
-        print("Usuari desconegut. Cancel·lant...")
+        print("Error: Usuari desconegut")
         sys.exit(1)
         
     puzzle_id = puzzle_id_from_path(puzzle_path)

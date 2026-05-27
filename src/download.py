@@ -12,7 +12,7 @@ OUT_DIR = Path("puzzles/repository")
 
 def download_puzzle(i: int | None, puzzle_id: str) -> None:
     '''
-    Donat un puzzle_id, crea el fitxer JSON corresponent si no existeix prèviament.
+    Donat un puzzle_id, crea el fitxer JSON corresponent si no existeix.
     '''
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)

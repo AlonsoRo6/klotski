@@ -1,6 +1,6 @@
 """
-Genera el graf, la solució i el gif de la solució per a TOTS els puzzles a la carpeta 'puzzles/'.
-Ús: python src/solve_all.py
+Genera el graf, la solució i el gif de la solució per a TOTS els puzzles a la carpeta 'puzzles/ o de la carpeta especificada'.
+Ús: python src/solve_all.py [--puzzles-dir puzzles/... --csv-path ..._metrics.csv]
 """
 
 from __future__ import annotations
@@ -43,10 +43,11 @@ def main() -> None:
 
     print(f"S'han trobat {len(puzzle_files)} puzzles.\n")
 
+
     for puzzle_path in puzzle_files:
         name = puzzle_path.stem  # Nom del fitxer sense extensió
         
-        print(f"{'='*40}")
+        print(f"\n{'='*40}")
         print(f"PROCESSANT: {name}")
         print(f"{'='*40}")
 

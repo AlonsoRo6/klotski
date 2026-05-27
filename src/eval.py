@@ -1,7 +1,7 @@
 """
 Avalua un puzzle fent servir unes mètriques específiques, i guarda la valoració al csv corresponent.
 
-Ús: python src/eval.py <puzzle.json> <graphs/puzzle.graphml>
+Ús: python3 src/eval.py <puzzles/puzzle.json> <graphs/puzzle.graphml> [<csv_path>]
 """
 from __future__ import annotations
 
@@ -11,18 +11,17 @@ from puzzle import Puzzle
 import os
 import pandas as pd 
 from typing import Any
-import joblib #type:ignore
+import joblib
 
 MODEL_PATH = 'model_difficulty.pkl'
 
 def predict_score_ml(metrics: dict[str, Any]) -> float | None:
-    """Intenta predir la nota usant el model de ML."""
+    """Intenta predir la nota usant el model de machine learning del fitxer model_difficulty.pkl."""
     if not os.path.exists(MODEL_PATH):
         return None
     
     try:
         model = joblib.load(MODEL_PATH)
-        # Preparar les dades en el mateix ordre que l'entrenament
         features = pd.DataFrame([{
             'size': metrics['size'],
             'min_moves': metrics['min_moves'],
@@ -38,6 +37,7 @@ def predict_score_ml(metrics: dict[str, Any]) -> float | None:
 
 
 def set_score(puzzle_id: str, puzzle: Puzzle, csv_path: str | Path) -> float | None:
+    '''Assigna una puntuació al puzzle donades unes mètriques guardades al csv_path'''
     df = pd.read_csv(csv_path)
     
     row_mask = df['id'] == puzzle_id
@@ -56,7 +56,7 @@ def set_score(puzzle_id: str, puzzle: Puzzle, csv_path: str | Path) -> float | N
     }
     
     score = predict_score_ml(metrics)
-    print(f"  🤖 Valoració (Machine Learning): {score} / 5.0")
+    print(f"Valoració: {score} / 5.0")
     
     df.loc[row_mask, 'score'] = score
     df.to_csv(csv_path, index=False)
@@ -92,5 +92,5 @@ if __name__ == "__main__":
     score = set_score(puzzle_id, puzzle, CSV_PATH)
     
     if score is not None:
-        print(f"\n--- Resultat per a {puzzle_path.name} ---")
-        print(f"\n  ⭐ Valoració: {score} / 5.0")
+        print(f"\nResultat per a {puzzle_path.name}")
+        print(f"Valoració: {score} / 5.0", int(score)*'⭐')

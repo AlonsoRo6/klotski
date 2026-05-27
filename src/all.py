@@ -4,6 +4,7 @@
 3r eval_all
 4t rate_all
 
+Ús: python3 src/all.py [--puzzles_dir puzzles/... --csv_path ..._metrics.csv --skip-download]
 '''
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ def main() -> None:
 
     user = input("Qui vol executar això? (x: Xavi, a: Angel): ").strip().lower()
     if user not in ('a', 'x'):
-        print("Usuari desconegut. Cancel·lant...")
+        print("Error: Usuari desconegut.")
         sys.exit(1)
     os.environ['KLOTSKI_USER'] = user
 

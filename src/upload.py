@@ -1,11 +1,9 @@
 """
-Eina upload.py: Envia un puzzle en format JSON al repositori central.
+Envia un puzzle en format JSON al repositori.
 
 Ús:
-    python src/upload.py <puzzle_path>
+    python3 src/upload.py <puzzle_path>
 
-Endpoints utilitzats:
-    POST /api/puzzles: Envia el puzzle i el token d'autenticació.
 """
 
 import json
@@ -48,7 +46,7 @@ def upload_puzzle(file_path: Path, token: str) -> bool:
             return True
         
     except Exception as e:
-        print(f"[!] Error enviant {file_path}: {e}")
+        print(f"Error enviant {file_path}: {e}")
         return False
     
 
@@ -67,7 +65,7 @@ if __name__ == '__main__':
     elif user == 'x':
         token = '019d90b1-6a3c-7000-ad15-514895909854'
     else:
-        print("Usuari desconegut. Cancel·lant...")
+        print("Error: Usuari desconegut.")
         sys.exit(1)
 
     if upload_puzzle(puzzle_path, token):

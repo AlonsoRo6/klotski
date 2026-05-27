@@ -42,7 +42,7 @@ def path_to_moves(
 
     Per cada pas del camí, sabem l'estat normalitzat destí (guardat al graf).
     Busquem quin moviment vàlid des de l'estat real actual porta a un estat
-    que tingui el mateix identificadot únic que el node destí.
+    que tingui el mateix identificador únic que el node destí.
     Així evitem qualsevol problema amb peces idèntiques reordenades.
     """
     vp_state = g.vp["state"]

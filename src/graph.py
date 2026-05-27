@@ -1,7 +1,7 @@
 """
-Construcció del graf d'un puzzle.
+Construcció del graf d'un puzzle i de les mètriques corresponents.
 
-Ús: python src/graph.py <puzzle.json> <output.graphml>
+Ús: python src/graph.py <puzzle.json> <output.graphml> [<csv_path>]
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def calculate_metrics_in_graph(g: gt.Graph, puzzle: Puzzle) -> dict:  # type: ig
     }
 
 
-def save_metrics_to_csv(puzzle_id: str, metrics: dict, csv_path: str):  # type: ignore
+def save_metrics_to_csv(puzzle_id: str, metrics: dict, csv_path: str):
     """Guarda les mètriques al CSV sense la nota (que es posarà a eval.py)"""
     if not metrics:
         return
@@ -112,12 +112,12 @@ def state_to_str(state: State) -> str:
     return ";".join(f"{x},{y}" for x, y in state.positions)
 
 
-def get_normalized_id(puzzle: Puzzle, state: State) -> tuple:  # type: ignore
+def get_normalized_id(puzzle: Puzzle, state: State) -> tuple: 
     """
     Genera un identificador únic que ignora l'ordre de peces idèntiques,
-    però mantenint fixes les peces que apareixen als objectius (goal pieces),
-    per evitar que la normalització confongui estats on la peça objectiu
-    és a la posició meta amb estats on és una altra peça idèntica la que hi és.
+    però mantenint fixes "goal pieces", per evitar que la normalització confongui
+    estats en què la peça objectiu és a la posició final amb estats on és una altra
+    peça idèntica la que hi és.
     """
 
     goal_piece_indices: set[int] = {i for i, _ in puzzle.goals}
@@ -147,7 +147,7 @@ def get_normalized_id(puzzle: Puzzle, state: State) -> tuple:  # type: ignore
     return (fixed_part, free_part)
 
 
-NODE_LIMIT = 2_500_000
+NODE_LIMIT = 1_750_000
 
 def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
     """
@@ -170,7 +170,7 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
 
     def get_or_create(state: State) -> gt.Vertex:
         key = get_normalized_id(puzzle, state)  # Normalitzem l'estat
-        if key not in state_to_vertex:  # si encara no l'havíem visitat: creem
+        if key not in state_to_vertex:  # si encara no l'havíem visitat, el creem
             v = g.add_vertex()
             vp_state[v] = state_to_str(state)
             vp_is_start[v] = (state == puzzle.start)
@@ -214,7 +214,7 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
             new_state = apply_move(puzzle, state, move)
             new_key = get_normalized_id(puzzle, new_state)
 
-            if new_key not in state_to_vertex: #si encara no l'hem visitat, afegim a l'stack
+            if new_key not in state_to_vertex: #si encara no l'hem visitat, l'afegim a l'stack
                 stack.append(new_state)
 
             v_new = get_or_create(new_state)

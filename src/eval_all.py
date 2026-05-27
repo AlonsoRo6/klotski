@@ -1,8 +1,8 @@
 """
-Avalua tots els puzzles que estan a la carpeta puzzles/. Si algun puzzle no tenia
+Avalua tots els puzzles que estan a la carpeta puzzles/... . Si algun puzzle no tenia
 el graf generat, crea el graf i després fa la valoració.
 
-Ús: python3 src/eval_all.py
+Ús: python3 src/eval_all.py [--puzzles-dir puzzles/... --csv-path ..._metrics.csv]
 """
 
 from __future__ import annotations
@@ -17,25 +17,24 @@ from puzzle import Puzzle
 
 
 
-
 def reeval_all(
     puzzles_dir: Path,
     graphs_dir: Path,
     csv_path: Path,
 ) -> None:
 
-    # Busquem tots els fitxers .json existents, de manera recursiva
+
     eval_files = list(puzzles_dir.rglob("*.json"))
 
     if not eval_files:
         print(f"No s'ha trobat cap .json a {puzzles_dir}/")
         sys.exit(0)
 
-    print(f"Trobats {len(eval_files)} puzzles per valorar. Avaluant...\n")
+    print(f"Trobats {len(eval_files)} puzzles. Avaluant...\n")
 
     for puzzle_path in eval_files:
         try:
-            puzzle_name = puzzle_path.name  # nom del puzzle
+            puzzle_name = puzzle_path.name 
 
             rel_path = puzzle_path.parent.relative_to(Path("puzzles"))
             graph_name = puzzle_path.name.replace(".json", ".graphml")
@@ -50,18 +49,18 @@ def reeval_all(
             puzzle_id = puzzle_path.stem.split("_")[-1]
 
             if not csv_path.exists():
-                print(f"Error: {csv_path} no existeix. Esborra el graf de {puzzle_name} i reintenta-ho.")
+                print(f"Error: {csv_path} no existeix.")
                 continue
                 
             score = set_score(puzzle_id, puzzle, csv_path)
 
             if score is not None:
-                print(f"--- Resultat per a {puzzle_path.name} ---")
-                print(f" ⭐ Valoració: {score} / 5.0")
+                print(f"Resultat per a {puzzle_path.name}")
+                print(f"Valoració: {score} / 5.0", int(score)*'⭐')
                 print()
                 
         except Exception as e:
-            print(f"Error evaluant {puzzle_path.name}: {e}")
+            print(f"Error avaluant {puzzle_path.name}: {e}")
 
 
 
@@ -80,7 +79,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Cridarem l'eval individual amb el CSV argument
 
     os.environ["KLOTSKI_CSV_PATH"] = args.csv_path
     

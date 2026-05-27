@@ -1,5 +1,7 @@
 """
-Envia TOTES les valoracions guardades al fitxer 'puzzles_metrics.csv' al repositori klotski.pauek.dev.
+Envia TOTES les valoracions guardades al fitxer '..._metrics.csv' al repositori klotski.pauek.dev.
+
+Ús: python rate_all.py [--puzzles-dir puzzles/... --csv-path ..._metrics.csv]
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ if __name__ == "__main__":
     elif user == 'x':
         token = '019d90b1-6a3c-7000-ad15-514895909854'
     else:
-        print("Usuari desconegut. Cancel·lant...")
+        print("Error: Usuari desconegut")
         sys.exit(1)
     
 
@@ -51,17 +53,15 @@ if __name__ == "__main__":
     valid_ids = set()
     if puzzles_dir.exists():
         for p in puzzles_dir.rglob("*.json"):
-            # Suposant que el nom és puzzle_{id}.json o {id}.json
             puzzle_id = p.stem.split("_")[-1]
             valid_ids.add(puzzle_id)
             
     df_filtered = df[df['id'].astype(str).isin(valid_ids)]
 
     total_puzzles = len(df_filtered)
-    print(f"S'han trobat {len(df)} valoracions al CSV. {total_puzzles} pertanyen a '{puzzles_dir}'.")
+    print(f"S'han trobat {len(df)} valoracions al CSV.")
 
     success_count = 0
-    # Iterem per cada fila filtrada
     for _, row in df_filtered.iterrows():
         try:
             puzzle_id = str(row['id'])
@@ -79,5 +79,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error inesperat processant la fila: {e}")
 
-    print(f"\n--- Procés finalitzat ---")
-    print(f"S'han enviat correctament {success_count} de {total_puzzles} puzzles.")
+    print(f"\nS'han enviat correctament {success_count} de {total_puzzles} puzzles.")

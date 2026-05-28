@@ -139,7 +139,7 @@ def _heuristic(puzzle: Puzzle, state: State) -> int:
         h += abs(sx - gx) + abs(sy - gy)
     return h
 
-def astar_path(puzzle: Puzzle, max_states: int = 2_000_000) -> list[tuple] | None: #type:ignore
+def astar_path(puzzle: Puzzle, max_states: int = 500_000) -> list[tuple] | None: #type:ignore
     start_pos = puzzle.start.positions
     counter = 0
     h_start = _heuristic(puzzle, puzzle.start)

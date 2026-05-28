@@ -188,7 +188,7 @@ def build_graph(puzzle: Puzzle, node_limit: int = NODE_LIMIT) -> gt.Graph:
             print(f"Límit de nodes superat ({node_limit}). S'atura la cerca.")
 
             print("Executant A* per trobar el camí òptim des de l'inici...")
-            opt_path = astar_path(puzzle, max_states=3_000_000)
+            opt_path = astar_path(puzzle, max_states=750_000)
             
             if opt_path:
                 print(f"A* ha trobat una solució de {len(opt_path)-1} passos. Validant la solució...")

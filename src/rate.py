@@ -68,7 +68,7 @@ def post_vote(puzzle_id: str, stars: float, token: str) -> bool:
             return True
     
     except Exception as e:
-        print(f"  [!] Error enviant {puzzle_id}: {e}")
+        print(f"Error enviant {puzzle_id}: {e}")
         return False
 
 

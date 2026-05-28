@@ -4,7 +4,7 @@
 3r eval_all
 4t rate_all
 
-Ús: python3 src/all.py [--puzzles_dir puzzles/... --csv_path ..._metrics.csv --skip-download]
+Ús: python3 src/all.py [--puzzles-dir puzzles/... --csv-path ..._metrics.csv --skip-download]
 '''
 from __future__ import annotations
 

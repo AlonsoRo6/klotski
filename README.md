@@ -90,6 +90,10 @@ A continuació es detalla com es fan servir els diferents programes del projecte
   # Exemple:
   python src/rate.py puzzles/sample1.json custom_metrics.csv
   ```
+* **Generar el graf, la solució i el gif introduint manualment el nom del puzzle i la ruta del csv**:
+  ```bash
+  python src/auto_solve.py
+  ```
 
 ### 4. Programes "All"
 Aquests programes serveixen per processar carpetes de puzzles senceres i guardar els resultats. Les flags són:
@@ -128,11 +132,11 @@ Exemples:
 El projecte està dividit en diferents programes petits, dissenyats en la mesura del possible per fer una funció concreta i que es "comuniquen" entre ells mitjançant l'escriptura i lectura de fitxers JSON que descriuen els trencaclosques i fitxers CSV amb les mètriques i valoracions dels mateixos.
 
 ### Programes Base
-- **`src/download.py`**: Es connecta al repositori remot per descarregar els puzzles.
+- **`src/download.py`**: Es descarrega els puzzles del repositori.
 - **`src/graph.py`**: Llegeix el puzzle i genera el graf d'estats fent servir la llibreria graph-tool. També extreu les mètriques del graf i les guarda al fitxer CSV.
 - **`src/solve.py`**: Resol un puzzle concret fent servir el graf d'estats per trobar el camí òptim i ho guarda en un JSON.
 - **`src/eval.py`**: Calcula una nota del 0 al 5 (decimal) d'un puzzle segons les mètriques obtingudes del seu graf. Actualitza el CSV amb la nota calculada.
-- **`src/rate.py`**: Envia les puntuacions obtingudes localment al repositori del projecte.
+- **`src/rate.py`**: Envia les puntuacions obtingudes al repositori del projecte.
 - **`src/generate.py`**: Genera puzzles sota diverses estratègies i amb uns certs paràmetres.
 - **`src/upload.py`**: Puja els puzzles generats al repositori del projecte.
 - **`src/play.py`, `src/image.py`, `src/movie.py`, `src/3D_view.py`**: Serveixen respectivament per jugar al puzzle manualment, generar una imatge fixa de l'estat inicial, fer una gravació de la solució o veure el graf generat en 3D.
@@ -141,10 +145,10 @@ El projecte està dividit en diferents programes petits, dissenyats en la mesura
 - **`src/auto_solve.py`**: Demana a l'usuari que introdueixi la ruta d'un puzzle i el nom d'un CSV i genera el graf, la solució i les mètriques d'aquell puzzle.
 
 ### Programes "All"
-Aquests scripts automatitzen processos executant seqüencialment les eines base sobre el directori `puzzles/`:
-- **`src/all.py`**: Orquestrador principal. Executa, per aquest ordre: `download`, `solve_all`, `eval_all` i finalment `rate_all`. Per tant, es descarrega tots els puzzles del repositori, en genera el graf, la solució i les mètriques, en calcula la nota i finalment envia les puntuacions al repositori del projecte.
+Aquests programes automatitzen processos executant seqüencialment les eines base sobre el directori `puzzles/`:
+- **`src/all.py`**: "All in one". Executa, per aquest ordre: `download`, `solve_all`, `eval_all` i finalment `rate_all`. Per tant, es descarrega tots els puzzles del repositori, en genera el graf, la solució i les mètriques, en calcula la nota i finalment envia les puntuacions al repositori del projecte.
 - **`src/solve_all.py`**: Itera per tota la carpeta de puzzles i per cadascun en genera el `graph`, en troba la solució òptima amb `solve` i genera el gif amb `movie`.
-- **`src/eval_all.py`**: Llegeix tots els puzzles locals, crea els seus grafs (si no existien) i executa l'avaluació amb `eval`, guardant la valoració al mateix CSv en què hi havia les mètriques.
+- **`src/eval_all.py`**: Llegeix tots els puzzles, crea els seus grafs (si no existien) i executa l'avaluació amb `eval`, guardant la valoració al mateix CSV en què hi havia les mètriques.
 - **`src/rate_all.py`**: Llegeix un CSV en què s'han guardat les valoracions dels puzzles i les puja totes al repositori del projecte.
 
 ---
@@ -177,24 +181,22 @@ Després de provar diferents fòrmules i maneres de valorar els grafs, no ens ac
 
 La manera en què el vam entrenar va ser la següent: vam agafar tots els puzzles originals del repositori i alguns puzzles que ja havíem generat anteriorment, i els hi vam posar una nota manualment. Aquesta nota està basada al 100% en el nostre criteri subjectiu, i tenint en compte el que feia que un puzzle fos "bo" segons nosaltres: si era suficientment complicat (però no massa com per que fos impossible), si ens agradava la manera en què es resolia (potser no era el klotski més llarg, però si que era un solució prou original) i en general, si ens semblava que era un puzzle que ens agradaria jugar.
 
-Un cop fet això, i com que les mètriques ja les tenim calculades quan generem el graf, a eval.py simplement hem de fer servir el model per a posar una vloració basant-se en les mètriques.
+Aquest model es basa en les diferents mètriques que hem calculat prèviament i intenta donar una nota basant-se en les relacions que troba entre les notes manuals que vam posar i les mètriques del graf. D'aquesta manera, i sense la necessitat de decidir de manera subjectiva què fa bona una mètrica i què la fa dolenta, podem trobar una relació entre la part més objectiva d'un puzzle, les seves mètriques, i la part més subjectiva, la nostra valoració.
+
+Un cop fet això, i com que les mètriques ja les tenim calculades quan generem el graf, a eval.py simplement hem de fer servir el model per a posar una valoració basant-se en les mètriques.
 
 ### Generació de puzzles
 Per generar nous puzzles també vam intentar seguir diverses estratègies. Per exemple, la primera estratègia que vam seguir va ser començar des de l'estat final, i moure enrere x moviments. El problema és que d'aquesta manera no ens assegurem que la millor solució estigui a x moviments, ja que pot existir un altre camí que estigui només a 3 moviments del goal malgrat haver fet 40 moviments.
 
-La següent manera que vam provar, i que és la que en un principi anàvem a fer servir, era, a partir de l'estat inicial i d'un goal prefixat, fer un A* per a veure si la solució estava al menys a x moviments de l'inici, i si no ho estava descartar el puzzle ràpidament. Si la solució de l'estrella complia amb els requisits, passàvem a fer un DFS normal per generar tot el graf i trobar la millor solució i veure si realment el puzzle era suficientment bo o no. D'aquesta manera tractàvem cada puzzle molt ràpidament però teníem el problema que es necessitaven massa intents per generar un sol puzzle.
-
-Finalment, la manera amb què ens hem quedat és la següent: partim d'un estat qualsevol, i aquest estat serà el nostre estat final.
-
+Finalment, l'estratègia que hem fet servir és la següent: a partir de l'estat inicial i d'un goal prefixat, fer un A* per a veure si la solució estaà al menys a x moviments de l'inici, i si no ho està descartar el puzzle ràpidament. Si la solució de l'A estrella compleix amb els requisits, passem a fer un DFS normal per generar tot el graf i trobar la millor solució i veure si realment el puzzle és suficientment bo o no. D'aquesta manera tractem cada puzzle molt ràpidament, però sí que és cert que necessitem molts intents per generar un puzzle bo.
 
 ### Seleccionar usuari
 Per tal que els dos poguéssim pujar els puzzles i les valoracions amb el nostre token i usuari de manera còmoda i àgil, hem fet que a tots els programes en què es necessita un token, a la terminal, al principi et demani qui ets: "x" per a Xavi i "a" per a Àngel. D'aquesta manera només necessitem tenir els tokens guardats en una variable i no haver d'introduir-lo cada cop que volem interactuar amb el repositori.
 
-
-
+---
 
 ## Referències i Eines de Suport
 
 - **Projecte Base**: El projecte es basa en les instruccions i estructura del repositori de GitHub d'en **Pau Fernández** ([pauek/klotski](https://github.com/pauek/klotski)), desenvolupat i estructurat amb la col·laboració i ajuda de **Roberto Nsoni** i **Jordi Cortadella**.
-- **Intel·ligència Artificial Generativa**: Durant l'execució d'aquest projecte s'han fet servir **Claude**, **Gemini** i l'**IDE Antigravity** per a comprendre millor la base de codi inicial proporcionada i l'arquitectura general del projecte, aprendre a utilitzar llibreries i eines noves per a nosaltres, com ara graph-tool, les llibreries request, json, argparse, sys, etc., superar el bloqueig inicial a l'hora d'implementar certs algorismes amb eines amb les quals no erem familiars, accelerar la localització d'errors desconeguts o comportaments inesperats...
+- **Intel·ligència Artificial Generativa**: Durant l'execució d'aquest projecte s'han fet servir **Claude**, **Gemini** i l'**IDE Antigravity** per a comprendre millor la base de codi inicial proporcionada i l'arquitectura general del projecte, aprendre a utilitzar llibreries i eines noves per a nosaltres, com ara graph-tool, les llibreries request, json, argparse, sys, etc., superar el bloqueig inicial a l'hora d'implementar certs algorismes amb eines amb les quals no erem familiars, accelerar la localització d'errors o comportaments inesperats...
 Malgrat això, tot el codi final ha estat revisat, adaptat i integrat de manera crítica per a assegurar-ne la correcció, l'eficiència i que compleixi tots els requisits del projecte.

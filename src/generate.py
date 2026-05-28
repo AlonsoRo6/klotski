@@ -1,33 +1,35 @@
 """
 Generador de puzzles de Klotski canònics.
 
-  - 'classic'  : taulell 4x5 amb peça 2x2 principal (Klotski clàssic)
-  - 'freeform' : taulell i peces aleatòries dins uns paràmetres
-  - 'walls'    : taulell amb parets
+  - classic : taulell 4x5 amb peça 2x2 principal
+  - freeform : taulell i peces aleatòries dins uns paràmetres
+  - walls : taulell amb parets
 
 Ús:
   python src/generate.py [--strategy classic|freeform|walls]
                          [--count N]
                          [--min-stars X]
-                         [-min-steps Y]
-                         [-max-states Z]
+                         [--min-steps Y]
+                         [--max-states Z]
                          [--num-goals M]
                          [--prefix P]
                          [--seed S]
                          [--quiet]
 
 Exemples:
-  python src/generate.py --strategy classic --count 5 --min-stars 2.5
-  python src/generate.py --strategy freeform --count 10 --min-stars 2.0
-  python src/generate.py --strategy walls --count 5 --min-stars 2.0
+  python src/generate.py --strategy classic --count 5 --min-stars 2.5 --min-steps 30
+  python src/generate.py --strategy freeform --count 10 --min-stars 2.0 --num-goals 2 --max-states 750000
+  python src/generate.py --strategy walls --count 5 --min-stars 2.0 --prefix walls
 """
 
 from __future__ import annotations
 
+from typing import Any
 import argparse
 import heapq
 import random
 import sys
+import os
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -36,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from puzzle import Coord, Piece, Puzzle, State
 from logic import possible_moves, apply_move, is_goal
 from eval import predict_score_ml
+from graph import save_metrics_to_csv
 
 
 def _cells(piece: Piece, pos: Coord) -> set[Coord]:
@@ -88,15 +91,15 @@ def _build_puzzle(
     goals: tuple[tuple[int, Coord], ...]
 ) -> Optional[Puzzle]:
     """
-    Construeix un Puzzle canònic a partir de les dades.
+    Construeix un Puzzle canònic a partir de la mida, les parets, les peces i la posició inicial, i els goals.
     Retorna None si la construcció falla per qualsevol motiu.
     """
     try:
         walls_t = tuple(sorted(set(walls)))
-        # Ordenació canònica: (forma, posició_inicial)
+
         sorted_pp = sorted(pieces_and_positions, key=lambda pp: (pp[0], pp[1]))
         
-        # Mapejar els índexs originals cap als nous índexs
+        # mapejar els índexs originals cap als nous índexs
         new_goals = []
         for g_idx, g_pos in goals:
             orig_piece = pieces_and_positions[g_idx][0]
@@ -115,8 +118,7 @@ def _build_puzzle(
 
 def _heuristic(puzzle: Puzzle, state: State) -> int:
     """
-    Heurística admissible: Distància de Manhattan entre la peça objectiu i la seva
-    posició final.
+    Heurística: Distància Manhattan entre la peça objectiu i la seva posició final.
     """
     h = 0
     for goal_idx, (gx, gy) in puzzle.goals:
@@ -142,7 +144,6 @@ def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
     queue: list[tuple[int, int, int, tuple]] = [(h_start, 0, counter, start_pos)] #type:ignore
     counter += 1
     
-    # Millor cost (g) trobat fins ara per a cada estat
     best_g: dict[tuple, int] = {start_pos: 0} #type:ignore
 
     num_states = 0
@@ -151,7 +152,6 @@ def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
         f, g, _, pos_tuple = heapq.heappop(queue)
         state = State(pos_tuple)
 
-        # Si ja havíem trobat un camí millor prèviament cap a aquest estat, l'ignorem
         if g > best_g.get(pos_tuple, float("inf")):
             continue
 
@@ -165,7 +165,6 @@ def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
             nb = nstate.positions
             new_g = g + 1
 
-            # Només afegim a la cua si hem trobat un camí millor
             if new_g < best_g.get(nb, float("inf")):
                 best_g[nb] = new_g
                 h = _heuristic(puzzle, nstate)
@@ -176,13 +175,12 @@ def _quick_astar(puzzle: Puzzle, max_states: int = 15_000) -> int | None:
 
 
 
-def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> dict | None: #type:ignore
+def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> tuple[dict | None, Any]: #type:ignore
     """
-    Exploració completa des de l'estat inicial limitat a `max_states`.
+    Exploració completa del puzzle des de l'estat inicial amb límit d'estats "max_states".
 
     Utilitza `build_graph` i `calculate_metrics_in_graph` de `graph.py`
-    si graph-tool està disponible, assegurant que la normalització d'estats
-    és idèntica a l'oficial per unificar els estats amb peces repetides.
+    assegurant que la normalització d'estats funcioni igual que a graph.py
     """
     try:
         from graph import build_graph, calculate_metrics_in_graph
@@ -206,15 +204,14 @@ def _full_explore(puzzle: Puzzle, max_states: int = 500_000) -> dict | None: #ty
 
         metrics["reachable"] = True
         metrics["truncated"] = truncated
-        return metrics
+        return metrics, g
 
     except ImportError:
         print("No s'ha pogut generar el graf complet. No s'han pogut calcular les mètriques.")
-        return None
+        return None, None
 
 
 
-# Formes predefinides (forma canònica, coordenades relatives ordenades)
 SHAPES: dict[str, Piece] = {
     "1x1": Piece((0, 0)),
     "1x2": Piece((0, 0), (0, 1)),
@@ -239,9 +236,6 @@ def _random_piece(rng: random.Random, choices: list[str]) -> Piece:
     return SHAPES[rng.choice(choices)]
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  PLACEMENT: col·loca peces al taulell sense solapament
-# ════════════════════════════════════════════════════════════════════════════
 
 
 def _place_pieces(
@@ -269,7 +263,7 @@ def _place_pieces(
                 return False
         return True
 
-    # Ordenem les peces de més grans a més petites per facilitar el bin packing
+    # Ordenem les peces de més grans a més petites per facilitar evitar solapamanets
     ordered_pieces = sorted(
         enumerate(pieces), key=lambda p: len(p[1].coords), reverse=True
     )
@@ -279,7 +273,6 @@ def _place_pieces(
         temp_positions: dict[int, Coord] = {}
         ok = True
         for orig_idx, piece in ordered_pieces:
-            # Posicions vàlides per a aquesta peça
             valid: list[Coord] = [
                 (x, y)
                 for x in range(W)
@@ -297,18 +290,16 @@ def _place_pieces(
     return None
 
 
-# ════════════════════════════════════════════════════════════════════════════
+# 
+
 #  ESTRATÈGIA 1: CLASSIC
 #  Taulell 4x5, peça 2x2 principal, peces clàssiques de Klotski.
-# ════════════════════════════════════════════════════════════════════════════
-
 
 def _goal_positions_for(piece: Piece, W: int, H: int) -> list[Coord]:
     """Retorna totes les posicions vàlides de l'objectiu per a una peça."""
     positions = []
     for x in range(W):
         for y in range(H):
-            # La peça ha de cabre dins del taulell en la posició objectiu
             if all(0 <= x + dx < W and 0 <= y + dy < H for dx, dy in piece.coords):
                 positions.append((x, y))
     return positions
@@ -318,9 +309,9 @@ def generate_classic(
     rng: random.Random, W: int = 4, H: int = 5, num_small_range: tuple[int, int] = (4, 6), num_medium_range: tuple[int, int] = (3, 4), num_goals: int = 1
 ) -> Optional[Puzzle]:
     """
-    Genera un puzzle estil Klotski clàssic:
-    - Peça 2x2 és l'objectiu principal
-    - Peces addicionals: 1x2/2x1 (medium) i 1x1 (small)
+    Genera un puzzle estil clàssic:
+    - La peça 2x2 és l'objectiu principal
+    - Peces addicionals: 1x2/2x1 i 1x1 
     - S'intenta posar la 2x2 a dalt de tot i l'objectiu a baix
     """
     main_piece = SHAPES["2x2"]
@@ -336,7 +327,7 @@ def generate_classic(
 
     all_pieces = [main_piece] + medium_pieces + small_pieces
 
-    # Busquem una disposició on el 2x2 comenci a la part superior
+    # Intentem que el 2x2 comenci a dalt
     positions = None
     for _ in range(15):
         pos_candidates = _place_pieces(rng, W, H, [], all_pieces)
@@ -383,10 +374,8 @@ def generate_classic(
     return _build_puzzle(W, H, [], pp, goals)
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  ESTRATÈGIA 2: FREEFORM
-# ════════════════════════════════════════════════════════════════════════════
 
+#  ESTRATÈGIA 2: FREEFORM
 
 def generate_freeform(
     rng: random.Random,
@@ -405,17 +394,17 @@ def generate_freeform(
 
     pieces: list[Piece] = []
     
-    # 1. Garantir almenys una peça gran (L, J, 2x2, 3x1...)
+    # garantir almenys una peça gran (L, J, 2x2, 3x1...)
     grans = [p for p in piece_pool if len(SHAPES[p].coords) >= 3 or p == "2x2"]
     if not grans: grans = piece_pool
     pieces.append(SHAPES[rng.choice(grans)])
     
-    # 2. Garantir almenys una peça petita però de mida 2 (1x2 o 2x1)
+    # garantir almenys una peça petita però de mida 2 (1x2 o 2x1)
     petites = [p for p in piece_pool if len(SHAPES[p].coords) == 2]
     if not petites: petites = piece_pool
     pieces.append(SHAPES[rng.choice(petites)])
     
-    # 3. La resta de peces de manera aleatòria
+    # la resta de peces de manera aleatòria
     for _ in range(num_pieces - 2):
         # Donem una mica més de probabilitat a les peces petites per no saturar el taulell
         weights = [1 if len(SHAPES[p].coords) >= 3 else 3 for p in piece_pool]
@@ -459,14 +448,11 @@ def generate_freeform(
     return _build_puzzle(W, H, [], pp, goals)
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  ESTRATÈGIA 3: WALLS
-#  Taulell amb parets que comporten laberints interiors.
-# ════════════════════════════════════════════════════════════════════════════
 
+#  ESTRATÈGIA 3: WALLS
 
 def _gen_walls(rng: random.Random, W: int, H: int, num_walls: int) -> list[Coord]:
-    """Genera parets aleatòries (caselles buides bloquejades)."""
+    """Genera parets aleatòries."""
     all_cells = [(x, y) for x in range(W) for y in range(H)]
     rng.shuffle(all_cells)
     return all_cells[:num_walls]
@@ -482,8 +468,7 @@ def generate_walls(
     num_goals: int = 1
 ) -> Optional[Puzzle]:
     """
-    Genera un puzzle amb parets que creen laberints interiors.
-    Les peces han de navegar al voltant de les parets.
+    Genera un puzzle amb parets.
     """
     W = rng.randint(*W_range)
     H = rng.randint(*H_range)    
@@ -493,19 +478,19 @@ def generate_walls(
 
     pieces: list[Piece] = []
     
-    # 1. Garantir almenys una peça gran (L, J, 2x2, 3x1...)
+    # garantir almenys una peça gran (L, J, 2x2, 3x1...)
     grans = [p for p in piece_pool if len(SHAPES[p].coords) >= 3 or p == "2x2"]
     if not grans: grans = piece_pool
     pieces.append(SHAPES[rng.choice(grans)])
     
-    # 2. Garantir almenys una peça petita però de mida 2 (1x2 o 2x1)
+    # garantir almenys una peça petita però de mida 2 (1x2 o 2x1)
     petites = [p for p in piece_pool if len(SHAPES[p].coords) == 2]
     if not petites: petites = piece_pool
     pieces.append(SHAPES[rng.choice(petites)])
     
-    # 3. La resta de peces de manera aleatòria
+    # la resta de peces de manera aleatòria
     for _ in range(num_pieces - 2):
-        # Donem una mica més de probabilitat a les peces petites perquè en parets l'espai és escàs
+        # Donem una mica més de probabilitat a les peces petites perquè amb parets hi ha menys espai
         weights = [1 if len(SHAPES[p].coords) >= 3 else 4 for p in piece_pool]
         name = rng.choices(piece_pool, weights=weights, k=1)[0]
         pieces.append(SHAPES[name])
@@ -554,24 +539,26 @@ STRATEGIES = {
 
 OUT_DIR = Path("puzzles/custom")
 
+
 def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 2.0, min_steps:int=15, max_states:int=750_000, rng_seed: int = random.randint(1, 1_000_000), verbose: bool = True, num_goals: int = 1, prefix: str = None) -> list[Path]:
     """
-    Genera "count" puzzles vàlids (que superin "min_stars") i els guarda.
+    Genera "count" puzzles vàlids (que superin "min_stars" i "min_steps") i els guarda.
     Retorna la llista de fitxers generats.
     """
+
     print(f'max_states: {max_states}')
     rng = random.Random(rng_seed)
     funcio_generacio = STRATEGIES[strategy]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print(
-        f"Generant puzzles (estratègia='{strategy}', mínim={min_stars}⭐)...")
+        f"Generant puzzles (estratègia='{strategy}', mínim={min_stars}⭐, passos={min_steps}, objectius={num_goals})")
     
-
     generated: list[Path] = []
     attempts = 0
     max_attempts = count * 1500  # evita bucle infinit
     comptador = 0
+    
     while len(generated) < count and attempts < max_attempts:
         attempts += 1
 
@@ -579,25 +566,25 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         if puzzle is None:
             continue
 
-        # 1. Si el taulell està massa buit o massa ple, no serà gaire complex ni eficient de buscar
+        # si el taulell està massa buit o massa ple, no serà gaire complex ni eficient de buscar
         total_cells = sum(len(p.coords) for p in puzzle.pieces)
         free_cells = (puzzle.W * puzzle.H) - total_cells - len(puzzle.walls)
         
-        # Si busquem puntuacions altes, exigim taulells més atapeïts (més difícils)
+        # si busquem puntuacions altes, serà millor que el taulell estigui més ple
         max_free = 4 if min_stars >= 4.0 else 10
         
         if free_cells < 2 or free_cells > max_free:
             continue
 
-        # 2. Descartem ràpidament els puzzles que no tenen solució o són evidents amb A*
+        # descartem ràpidament els puzzles que no tenen solució o són massa fàcils amb A*
         min_moves_astar = _quick_astar(puzzle)
-        print(attempts)
+        print(f'Portem {attempts} intents')
         if min_moves_astar is None or min_moves_astar < min_steps:
             continue
 
-        # 3. Només s'executa si el filtre de l'A* indica que el puzle promet
+        # només s'executa si passa el filtre de l'A*
         comptador += 1
-        metrics = _full_explore(puzzle, max_states)
+        metrics, g = _full_explore(puzzle, max_states)
         
         if metrics is None:
             continue
@@ -607,7 +594,7 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         if metrics["min_moves"] is None or metrics["min_moves"] < min_steps:
             continue  #per si un cas s'ha saltat el filtre d'abans
         if metrics["num_states"] < 20:
-            continue  # massa petit
+            continue 
         if metrics["min_moves"] > min_moves_astar + 5: #el graf és tan gran que la solució trobada s'allunya masssa de la òptima
             continue
         
@@ -617,11 +604,10 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         if pred is not None:
             stars, source = pred, "ML"
             
-        print(stars)
         if stars < min_stars:
             continue
 
-        # Desa el puzzle
+        # guardem el puzzle
         idx = len(generated) + 1
         if prefix:
             name = f"{prefix}{idx:02d}.json"
@@ -630,6 +616,23 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
         path = OUT_DIR / name
         path.write_text(puzzle.to_json())
         generated.append(path)
+
+        # guardem el graf i les mètriques
+        if g is not None:
+            try:
+                rel_path = path.parent.relative_to(Path("puzzles"))
+                graph_dir = Path("graphs") / rel_path
+                graph_dir.mkdir(parents=True, exist_ok=True)
+                graph_path = graph_dir / name.replace(".json", ".graphml")
+                g.save(str(graph_path))
+
+                # Guardar les mètriques al CSV corresponent
+                default_csv = "custom_metrics.csv" if rel_path == Path("custom") else "puzzles_metrics.csv"
+                csv_path = os.environ.get("KLOTSKI_CSV_PATH", default_csv)
+                puzzle_id = name.replace(".json", "").split("_")[-1]
+                save_metrics_to_csv(puzzle_id, metrics, csv_path)
+            except Exception as e:
+                print(f"No s'ha pogut guardar el graf o les mètriques automàticament: {e}")
 
         moves_str = str(metrics["min_moves"])
         arts_str = str(metrics["articulation_points"])
@@ -648,15 +651,15 @@ def generate_batch(strategy: str = "classic",count: int = 5, min_stars: float = 
 
     if len(generated) < count:
         print(
-            f"\n⚠ Només s'han generat {len(generated)}/{count} puzzles en {attempts} intents."
+            f"\nNomés s'han generat {len(generated)}/{count} puzzles en {attempts} intents."
         )
-        print("  Prova de reduir --min-stars, --min-steps, --max-states, o canviar d'estratègia.")
+        print("Prova de reduir --min-stars, --min-steps, --max-states, o canviar d'estratègia.")
     else:
         print(
-            f"\n✓ {len(generated)} puzzles generats a '{OUT_DIR}')"
+            f"\n{len(generated)} puzzles generats a '{OUT_DIR}')"
         )
     
-    print(f"S'han explorat {comptador} puzzles amb dfs (graph_tool)")
+    print(f"S'han explorat {comptador} puzzles amb dfs")
 
     return generated
 
